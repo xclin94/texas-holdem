@@ -393,6 +393,27 @@ input[type='checkbox'] {
   color: #dcffe8;
 }
 
+.hand-banner {
+  margin-bottom: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(232, 187, 97, 0.55);
+  background: rgba(0, 0, 0, 0.36);
+  color: #ffe4a2;
+  padding: 7px 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.hand-banner.error {
+  border-color: rgba(255, 116, 140, 0.55);
+  color: #ffd3db;
+}
+
+.hand-banner.ok {
+  border-color: rgba(126, 229, 170, 0.45);
+  color: #dcffe8;
+}
+
 .status-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -519,6 +540,13 @@ input[type='checkbox'] {
   backdrop-filter: blur(2px);
   padding: 8px;
   transform: translate(-50%, -50%);
+  transition:
+    left 260ms ease,
+    top 260ms ease,
+    width 220ms ease,
+    min-height 220ms ease,
+    box-shadow 200ms ease,
+    border-color 200ms ease;
 }
 
 .seat-node.dense {
@@ -538,6 +566,16 @@ input[type='checkbox'] {
 .seat-node.me {
   border-color: rgba(232, 187, 97, 0.92);
   box-shadow: 0 0 0 2px rgba(232, 187, 97, 0.25);
+}
+
+.seat-node.turn {
+  border-color: rgba(126, 229, 170, 0.82);
+  box-shadow: 0 0 0 2px rgba(126, 229, 170, 0.22);
+  animation: turnPulse 1.3s ease-in-out infinite;
+}
+
+.seat-node.spotlight {
+  animation: seatSpotlight 1s ease;
 }
 
 .seat-head {
@@ -613,6 +651,10 @@ input[type='checkbox'] {
 .card-face.back {
   background: repeating-linear-gradient(45deg, #264d3a, #264d3a 8px, #1b3a2d 8px, #1b3a2d 16px);
   color: transparent;
+}
+
+.card-face.deal-in {
+  animation: dealIn 320ms ease;
 }
 
 .players {
@@ -693,6 +735,12 @@ input[type='checkbox'] {
   font-weight: 600;
 }
 
+.quick-raise .btn.active {
+  border-color: rgba(232, 187, 97, 0.6);
+  background: rgba(232, 187, 97, 0.22);
+  color: #ffe8b4;
+}
+
 .result-winners {
   display: flex;
   flex-direction: column;
@@ -728,6 +776,39 @@ input[type='checkbox'] {
 
 .result-cta {
   margin-top: 10px;
+}
+
+@keyframes dealIn {
+  from {
+    transform: translateY(-10px) scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes turnPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(126, 229, 170, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(126, 229, 170, 0.28);
+  }
+}
+
+@keyframes seatSpotlight {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  40% {
+    transform: translate(-50%, -50%) scale(1.08);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
 }
 
 .hint {
@@ -917,6 +998,20 @@ input[type='checkbox'] {
 
   .status-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .room-top .actions {
+    width: 100%;
+  }
+
+  .room-top .actions .btn {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 0;
+  }
+
+  .hand-banner {
+    font-size: 13px;
+    padding: 6px 8px;
   }
 
   .blind-row {
