@@ -4,12 +4,10 @@
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "PARTY_PORT=3000 node party-server.js",
-    "dev": "PARTY_PORT=3000 node party-server.js",
+    "start": "node server.js",
+    "dev": "HOLDEM_PORT=3000 node server.js",
     "holdem": "node server.js",
-    "game3200": "HOLDEM_PORT=3200 node server.js",
-    "quiz3300": "PARTY_PORT=3300 node party-server.js",
-    "quiz3000": "PARTY_PORT=3000 node party-server.js"
+    "holdem:3200": "HOLDEM_PORT=3200 node server.js"
   },
   "keywords": [],
   "author": "",
