@@ -1,0 +1,847 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>单机多人模式</title>
+    <style>
+      :root {
+        --bg0: #180d06;
+        --bg1: #6d2f10;
+        --line: rgba(255, 218, 150, 0.34);
+        --panel: rgba(255, 236, 210, 0.11);
+        --panel-strong: rgba(255, 236, 210, 0.2);
+        --text: #fff7eb;
+        --muted: #ffd8a7;
+        --ok: #c6ffd6;
+        --bad: #ffd7d7;
+        --gold: #ffd867;
+        --orange: #ff9e3a;
+      }
+
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+        color: var(--text);
+        background: radial-gradient(circle at 8% 9%, #8a3f1a 0%, transparent 35%),
+          radial-gradient(circle at 92% 6%, #b3571f 0%, transparent 32%),
+          linear-gradient(160deg, var(--bg0), var(--bg1));
+      }
+
+      body {
+        display: flex;
+        justify-content: center;
+        padding: max(12px, env(safe-area-inset-top)) 12px max(18px, env(safe-area-inset-bottom));
+      }
+
+      .app {
+        width: min(760px, 100%);
+        display: grid;
+        gap: 12px;
+      }
+
+      .panel {
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        background: linear-gradient(150deg, var(--panel-strong), var(--panel));
+        padding: 14px;
+      }
+
+      .hero {
+        text-align: center;
+        display: grid;
+        gap: 8px;
+      }
+
+      .hero h1,
+      .hero p {
+        margin: 0;
+      }
+
+      .hero h1 {
+        font-size: clamp(24px, 7vw, 36px);
+      }
+
+      .hero p {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .grid2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+        color: #ffe9c6;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      input,
+      select,
+      textarea,
+      button {
+        font-family: inherit;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        border: 1px solid rgba(255, 220, 160, 0.36);
+        border-radius: 12px;
+        background: rgba(0, 0, 0, 0.24);
+        color: var(--text);
+        padding: 10px 12px;
+        font-size: 16px;
+        outline: none;
+      }
+
+      textarea {
+        min-height: 120px;
+        resize: vertical;
+      }
+
+      .btn {
+        border: 0;
+        border-radius: 12px;
+        padding: 11px 13px;
+        font-size: 16px;
+        font-weight: 800;
+        cursor: pointer;
+        background: linear-gradient(120deg, var(--gold), var(--orange));
+        color: #612104;
+      }
+
+      .btn.secondary {
+        background: rgba(255, 242, 219, 0.12);
+        border: 1px solid var(--line);
+        color: #ffe5ba;
+      }
+
+      a.btn {
+        text-decoration: none;
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .hint {
+        min-height: 22px;
+        margin: 8px 0 0;
+        font-weight: 700;
+      }
+
+      .hint.ok {
+        color: var(--ok);
+      }
+
+      .hint.bad {
+        color: var(--bad);
+      }
+
+      .small {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      .scoreboard {
+        margin-top: 10px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .score-row {
+        border: 1px solid rgba(255, 220, 156, 0.24);
+        border-radius: 10px;
+        padding: 8px 10px;
+        background: rgba(0, 0, 0, 0.2);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .score-row.current {
+        border-color: rgba(255, 240, 181, 0.95);
+        box-shadow: 0 0 0 1px rgba(255, 240, 181, 0.45) inset;
+      }
+
+      .turn-box {
+        margin-top: 10px;
+        border: 1px solid rgba(255, 218, 150, 0.25);
+        border-radius: 12px;
+        padding: 10px;
+        background: rgba(0, 0, 0, 0.2);
+        display: grid;
+        gap: 8px;
+      }
+
+      .turn-title {
+        margin: 0;
+        font-size: 22px;
+        font-weight: 800;
+      }
+
+      .question-title {
+        margin: 0;
+        font-size: 20px;
+      }
+
+      .options {
+        margin-top: 8px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .opt {
+        width: 100%;
+        text-align: left;
+        border: 1px solid rgba(255, 220, 156, 0.35);
+        border-radius: 12px;
+        padding: 11px 12px;
+        background: rgba(0, 0, 0, 0.25);
+        color: var(--text);
+        font-size: 15px;
+        font-weight: 700;
+      }
+
+      .opt.correct {
+        border-color: rgba(186, 255, 203, 0.95);
+        background: rgba(76, 166, 95, 0.25);
+      }
+
+      .opt.wrong {
+        border-color: rgba(255, 182, 182, 0.95);
+        background: rgba(166, 76, 76, 0.25);
+      }
+
+      .memory-board {
+        margin-top: 10px;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .memory-card {
+        border: 1px solid rgba(255, 220, 156, 0.35);
+        border-radius: 12px;
+        aspect-ratio: 3 / 4;
+        background: linear-gradient(150deg, rgba(119, 14, 14, 0.58), rgba(66, 8, 8, 0.75));
+        color: #ffd8a2;
+        font-size: clamp(20px, 6vw, 32px);
+        font-weight: 800;
+        display: grid;
+        place-items: center;
+      }
+
+      .memory-card.open,
+      .memory-card.done {
+        background: linear-gradient(150deg, #fff2cf, #ffd98e);
+        color: #7c1808;
+      }
+
+      .result-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .result-row {
+        border: 1px solid rgba(255, 220, 156, 0.35);
+        border-radius: 10px;
+        padding: 9px 10px;
+        background: rgba(0, 0, 0, 0.22);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .footer {
+        text-align: center;
+        color: #ffd8a7;
+        font-size: 12px;
+      }
+
+      @media (max-width: 560px) {
+        .grid2 {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <section class="panel">
+        <header class="hero">
+          <h1>单机多人模式</h1>
+          <p>一台手机轮流玩。适合围坐一起传手机接力，支持快问快答和翻牌冲刺。</p>
+        </header>
+      </section>
+
+      <section id="setupView" class="panel">
+        <div class="grid2">
+          <label>
+            玩法
+            <select id="localGameSelect">
+              <option value="quiz">快问快答（传手机作答）</option>
+              <option value="memory">翻牌冲刺（传手机刷分）</option>
+            </select>
+          </label>
+          <label>
+            回合数
+            <input id="localRoundsInput" type="number" min="1" max="8" value="3" />
+          </label>
+        </div>
+        <label style="margin-top: 10px">
+          每人每回合时长（秒）
+          <input id="localSecondsInput" type="number" min="8" max="60" value="20" />
+        </label>
+        <div id="localLimitsText" class="small" style="margin-top: 8px">建议范围：-</div>
+        <label style="margin-top: 10px">
+          玩家名单（每行一个，至少 2 人）
+          <textarea id="playersInput" placeholder="阿明&#10;小红&#10;爷爷&#10;奶奶"></textarea>
+        </label>
+        <div class="grid2" style="margin-top: 10px">
+          <button id="startLocalBtn" class="btn">开始单机多人</button>
+          <a class="btn secondary" href="/">返回联机大厅</a>
+        </div>
+        <p id="setupHint" class="hint"></p>
+      </section>
+
+      <section id="playView" class="panel hidden">
+        <div class="turn-box">
+          <p id="turnTitle" class="turn-title">第 1 / 3 轮</p>
+          <div id="turnSub" class="small">当前玩家：-</div>
+          <div id="turnTimer" class="small">倒计时：-- 秒</div>
+        </div>
+
+        <div id="handoffBox" class="turn-box">
+          <div id="handoffText" class="small">请把手机交给当前玩家，准备后开始。</div>
+          <button id="beginTurnBtn" class="btn">开始该玩家回合</button>
+        </div>
+
+        <section id="quizArea" class="hidden" style="margin-top: 10px">
+          <p id="quizQuestion" class="question-title">题目</p>
+          <div id="quizOptions" class="options"></div>
+        </section>
+
+        <section id="memoryArea" class="hidden" style="margin-top: 10px">
+          <div id="memoryScore" class="small">本回合分数：0</div>
+          <div id="memoryBoard" class="memory-board"></div>
+        </section>
+
+        <div id="localScoreboard" class="scoreboard"></div>
+        <p id="playHint" class="hint"></p>
+      </section>
+
+      <section id="resultView" class="panel hidden">
+        <h2 style="margin-top: 0">本局结果</h2>
+        <div id="resultList" class="result-list"></div>
+        <div class="grid2" style="margin-top: 10px">
+          <button id="restartBtn" class="btn">再来一局（同配置）</button>
+          <a class="btn secondary" href="/">回联机大厅</a>
+        </div>
+      </section>
+
+      <p class="footer">访问地址：`http://你的IP:3300/`，然后点击“单机多人模式”。</p>
+    </main>
+
+    <script>
+      const QUIZ_PROMPTS = [
+        { question: '春节通常在农历的哪个月份？', correct: '正月', wrongs: ['二月', '十一月', '腊月'] },
+        { question: '“守岁”这个习俗主要发生在什么时候？', correct: '除夕夜', wrongs: ['元宵节', '端午节', '中秋节'] },
+        { question: '压岁钱传统上主要寓意什么？', correct: '辟邪保平安', wrongs: ['买零食', '支付房租', '交水电费'] },
+        { question: '“年夜饭”一般在什么时候吃？', correct: '除夕晚上', wrongs: ['初一中午', '初二早上', '元宵当天'] },
+        { question: '春节联欢晚会通常在哪一天播出？', correct: '除夕', wrongs: ['初一', '初五', '正月十五'] },
+        { question: '春联通常贴在哪里？', correct: '门框两侧', wrongs: ['冰箱背面', '天花板', '地板中央'] },
+        { question: '春节放鞭炮传统上象征什么？', correct: '驱邪迎新', wrongs: ['提醒上班', '降温除尘', '庆祝考试'] },
+        { question: '“福”字倒贴通常寓意什么？', correct: '福到了', wrongs: ['贴错方向', '防盗记号', '门牌编号'] },
+        { question: '拜年时常见祝福语是？', correct: '万事如意', wrongs: ['一路顺风', '注意防晒', '按时睡觉'] },
+        { question: '元宵节最具代表性的食物是？', correct: '汤圆', wrongs: ['月饼', '粽子', '饺子'] },
+      ];
+
+      const MEMORY_SYMBOLS = ['福', '春', '喜', '财', '旺', '安'];
+      const LIMITS = {
+        quiz: { roundsMin: 1, roundsMax: 8, secMin: 8, secMax: 45 },
+        memory: { roundsMin: 1, roundsMax: 8, secMin: 10, secMax: 60 }
+      };
+
+      const setupView = document.getElementById('setupView');
+      const playView = document.getElementById('playView');
+      const resultView = document.getElementById('resultView');
+
+      const localGameSelect = document.getElementById('localGameSelect');
+      const localRoundsInput = document.getElementById('localRoundsInput');
+      const localSecondsInput = document.getElementById('localSecondsInput');
+      const localLimitsText = document.getElementById('localLimitsText');
+      const playersInput = document.getElementById('playersInput');
+      const startLocalBtn = document.getElementById('startLocalBtn');
+      const setupHint = document.getElementById('setupHint');
+
+      const turnTitle = document.getElementById('turnTitle');
+      const turnSub = document.getElementById('turnSub');
+      const turnTimer = document.getElementById('turnTimer');
+      const handoffBox = document.getElementById('handoffBox');
+      const handoffText = document.getElementById('handoffText');
+      const beginTurnBtn = document.getElementById('beginTurnBtn');
+      const localScoreboard = document.getElementById('localScoreboard');
+      const playHint = document.getElementById('playHint');
+
+      const quizArea = document.getElementById('quizArea');
+      const quizQuestion = document.getElementById('quizQuestion');
+      const quizOptions = document.getElementById('quizOptions');
+
+      const memoryArea = document.getElementById('memoryArea');
+      const memoryScore = document.getElementById('memoryScore');
+      const memoryBoard = document.getElementById('memoryBoard');
+
+      const resultList = document.getElementById('resultList');
+      const restartBtn = document.getElementById('restartBtn');
+
+      let localGame = null;
+      let timer = null;
+      let restartSnapshot = null;
+
+      function setHint(el, text, type) {
+        el.textContent = text || '';
+        el.className = 'hint';
+        if (type) el.classList.add(type);
+      }
+
+      function clampInt(value, min, max, fallback) {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.max(min, Math.min(max, Math.floor(n)));
+      }
+
+      function shuffle(list) {
+        const arr = [...list];
+        for (let i = arr.length - 1; i > 0; i -= 1) {
+          const j = Math.floor(Math.random() * (i + 1));
+          const t = arr[i];
+          arr[i] = arr[j];
+          arr[j] = t;
+        }
+        return arr;
+      }
+
+      function limitText(mode) {
+        const l = LIMITS[mode];
+        return '建议范围：回合 ' + l.roundsMin + '-' + l.roundsMax + '，每人每回合 ' + l.secMin + '-' + l.secMax + ' 秒';
+      }
+
+      function normalizeSetup(mode, rounds, seconds) {
+        const l = LIMITS[mode] || LIMITS.quiz;
+        return {
+          mode,
+          rounds: clampInt(rounds, l.roundsMin, l.roundsMax, l.roundsMin),
+          seconds: clampInt(seconds, l.secMin, l.secMax, l.secMin),
+        };
+      }
+
+      function parsePlayers(text) {
+        const list = String(text || '')
+          .split('\n')
+          .map((v) => v.trim())
+          .filter(Boolean)
+          .slice(0, 12);
+        const names = [];
+        const used = new Set();
+        list.forEach((name) => {
+          if (!name) return;
+          let n = name.slice(0, 12);
+          if (!used.has(n)) {
+            used.add(n);
+            names.push(n);
+          }
+        });
+        return names;
+      }
+
+      function currentPlayer() {
+        if (!localGame) return null;
+        return localGame.players[localGame.playerIndex] || null;
+      }
+
+      function clearTimer() {
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+      }
+
+      function openSetup() {
+        setupView.classList.remove('hidden');
+        playView.classList.add('hidden');
+        resultView.classList.add('hidden');
+      }
+
+      function openPlay() {
+        setupView.classList.add('hidden');
+        playView.classList.remove('hidden');
+        resultView.classList.add('hidden');
+      }
+
+      function openResult() {
+        setupView.classList.add('hidden');
+        playView.classList.add('hidden');
+        resultView.classList.remove('hidden');
+      }
+
+      function renderScoreboard() {
+        if (!localGame) return;
+        const current = currentPlayer();
+        localScoreboard.innerHTML = '';
+        localGame.players.forEach((p, idx) => {
+          const row = document.createElement('div');
+          row.className = 'score-row' + (current && current.name === p.name && localGame.phase !== 'result' ? ' current' : '');
+          row.innerHTML =
+            '<div><strong>' +
+            (idx + 1) +
+            '. ' +
+            p.name +
+            '</strong><div class="small">答对 ' +
+            p.correct +
+            ' · 答错 ' +
+            p.wrong +
+            '</div></div><strong>' +
+            p.score +
+            ' 分</strong>';
+          localScoreboard.appendChild(row);
+        });
+      }
+
+      function updateTopInfo() {
+        if (!localGame) return;
+        const p = currentPlayer();
+        turnTitle.textContent = '第 ' + (localGame.roundIndex + 1) + ' / ' + localGame.rounds + ' 轮';
+        turnSub.textContent = p ? '当前玩家：' + p.name + '（第 ' + (localGame.playerIndex + 1) + '/' + localGame.players.length + ' 位）' : '当前玩家：-';
+      }
+
+      function updateTimer() {
+        if (!localGame || localGame.phase !== 'playing') {
+          turnTimer.textContent = '倒计时：-- 秒';
+          return;
+        }
+        const leftMs = Math.max(0, localGame.turnEndsAt - Date.now());
+        const leftSec = Math.ceil(leftMs / 1000);
+        turnTimer.textContent = '倒计时：' + leftSec + ' 秒';
+        if (leftMs <= 0) {
+          if (localGame.mode === 'quiz') {
+            finalizeQuizTurn(null, true);
+          } else {
+            finalizeMemoryTurn();
+          }
+        }
+      }
+
+      function nextTurnOrFinish() {
+        if (!localGame) return;
+        localGame.playerIndex += 1;
+        if (localGame.playerIndex >= localGame.players.length) {
+          localGame.playerIndex = 0;
+          localGame.roundIndex += 1;
+        }
+        if (localGame.roundIndex >= localGame.rounds) {
+          finishGame();
+          return;
+        }
+        showHandoff();
+      }
+
+      function showHandoff() {
+        if (!localGame) return;
+        localGame.phase = 'handoff';
+        updateTopInfo();
+        turnTimer.textContent = '倒计时：-- 秒';
+        handoffBox.classList.remove('hidden');
+        quizArea.classList.add('hidden');
+        memoryArea.classList.add('hidden');
+        const p = currentPlayer();
+        handoffText.textContent = '请把手机交给 ' + (p ? p.name : '-') + '，点击开始后再作答。';
+        setHint(playHint, '', '');
+        renderScoreboard();
+      }
+
+      function makeQuizQuestion() {
+        if (!localGame) return null;
+        if (!localGame.quizPool.length) {
+          localGame.quizPool = shuffle(QUIZ_PROMPTS);
+        }
+        const base = localGame.quizPool.pop();
+        const opts = shuffle([base.correct, ...base.wrongs]);
+        return {
+          question: base.question,
+          options: opts,
+          answer: opts.indexOf(base.correct),
+        };
+      }
+
+      function startQuizTurn() {
+        localGame.quizAnswered = false;
+        localGame.activeQuiz = makeQuizQuestion();
+        quizQuestion.textContent = localGame.activeQuiz.question;
+        quizOptions.innerHTML = '';
+
+        localGame.activeQuiz.options.forEach((opt, idx) => {
+          const btn = document.createElement('button');
+          btn.className = 'opt';
+          btn.textContent = String.fromCharCode(65 + idx) + '. ' + opt;
+          btn.addEventListener('click', () => {
+            finalizeQuizTurn(idx, false);
+          });
+          quizOptions.appendChild(btn);
+        });
+
+        quizArea.classList.remove('hidden');
+        memoryArea.classList.add('hidden');
+      }
+
+      function finalizeQuizTurn(choice, timeout) {
+        if (!localGame || localGame.phase !== 'playing' || localGame.mode !== 'quiz') return;
+        if (localGame.quizAnswered) return;
+        localGame.quizAnswered = true;
+        clearTimer();
+
+        const p = currentPlayer();
+        const q = localGame.activeQuiz;
+        const optionButtons = [...quizOptions.querySelectorAll('.opt')];
+        optionButtons.forEach((btn, idx) => {
+          btn.disabled = true;
+          if (idx === q.answer) btn.classList.add('correct');
+        });
+
+        if (timeout || choice === null || choice === undefined) {
+          p.wrong += 1;
+          setHint(playHint, p.name + ' 超时未作答，本题不得分。', 'bad');
+        } else if (choice === q.answer) {
+          const leftMs = Math.max(0, localGame.turnEndsAt - Date.now());
+          const gain = 100 + Math.min(100, Math.floor(leftMs / 120));
+          p.score += gain;
+          p.correct += 1;
+          setHint(playHint, p.name + ' 回答正确，+' + gain + ' 分。', 'ok');
+        } else {
+          p.wrong += 1;
+          if (optionButtons[choice]) optionButtons[choice].classList.add('wrong');
+          setHint(playHint, p.name + ' 回答错误。', 'bad');
+        }
+
+        renderScoreboard();
+        setTimeout(nextTurnOrFinish, 1200);
+      }
+
+      function initMemoryDeck() {
+        const cards = shuffle([...MEMORY_SYMBOLS, ...MEMORY_SYMBOLS]);
+        localGame.memoryDeck = cards.map((symbol, idx) => ({
+          id: idx + 1,
+          symbol,
+          open: false,
+          done: false,
+        }));
+        localGame.memoryOpen = [];
+        localGame.memoryBusy = false;
+        localGame.memoryScore = 0;
+        memoryScore.textContent = '本回合分数：0';
+      }
+
+      function renderMemoryBoard() {
+        if (!localGame) return;
+        memoryBoard.innerHTML = '';
+        localGame.memoryDeck.forEach((card, idx) => {
+          const btn = document.createElement('button');
+          btn.className = 'memory-card' + (card.open ? ' open' : '') + (card.done ? ' done' : '');
+          btn.textContent = card.open || card.done ? card.symbol : '福';
+          btn.disabled = localGame.phase !== 'playing' || localGame.memoryBusy || card.open || card.done;
+          btn.addEventListener('click', () => onMemoryPick(idx));
+          memoryBoard.appendChild(btn);
+        });
+      }
+
+      function onMemoryPick(index) {
+        if (!localGame || localGame.phase !== 'playing' || localGame.mode !== 'memory') return;
+        if (localGame.memoryBusy) return;
+        const card = localGame.memoryDeck[index];
+        if (!card || card.open || card.done) return;
+        if (localGame.memoryOpen.length >= 2) return;
+
+        card.open = true;
+        localGame.memoryOpen.push(index);
+        renderMemoryBoard();
+
+        if (localGame.memoryOpen.length < 2) return;
+
+        const [a, b] = localGame.memoryOpen;
+        const c1 = localGame.memoryDeck[a];
+        const c2 = localGame.memoryDeck[b];
+
+        if (c1.symbol === c2.symbol) {
+          c1.done = true;
+          c2.done = true;
+          localGame.memoryOpen = [];
+          localGame.memoryScore += 10;
+          memoryScore.textContent = '本回合分数：' + localGame.memoryScore;
+          renderMemoryBoard();
+          return;
+        }
+
+        localGame.memoryBusy = true;
+        setTimeout(() => {
+          c1.open = false;
+          c2.open = false;
+          localGame.memoryOpen = [];
+          localGame.memoryBusy = false;
+          localGame.memoryScore = Math.max(0, localGame.memoryScore - 2);
+          memoryScore.textContent = '本回合分数：' + localGame.memoryScore;
+          renderMemoryBoard();
+        }, 420);
+      }
+
+      function startMemoryTurn() {
+        initMemoryDeck();
+        quizArea.classList.add('hidden');
+        memoryArea.classList.remove('hidden');
+        renderMemoryBoard();
+      }
+
+      function finalizeMemoryTurn() {
+        if (!localGame || localGame.phase !== 'playing' || localGame.mode !== 'memory') return;
+        clearTimer();
+        const p = currentPlayer();
+        const gain = Math.max(0, localGame.memoryScore || 0);
+        p.score += gain;
+        setHint(playHint, p.name + ' 本回合结算：+' + gain + ' 分。', 'ok');
+        renderScoreboard();
+        setTimeout(nextTurnOrFinish, 900);
+      }
+
+      function startTurn() {
+        if (!localGame || localGame.phase !== 'handoff') return;
+        localGame.phase = 'playing';
+        localGame.turnEndsAt = Date.now() + localGame.seconds * 1000;
+        handoffBox.classList.add('hidden');
+        setHint(playHint, '', '');
+        updateTopInfo();
+        renderScoreboard();
+
+        if (localGame.mode === 'quiz') {
+          startQuizTurn();
+        } else {
+          startMemoryTurn();
+        }
+
+        clearTimer();
+        updateTimer();
+        timer = setInterval(updateTimer, 120);
+      }
+
+      function finishGame() {
+        clearTimer();
+        if (!localGame) return;
+        localGame.phase = 'result';
+
+        const ranking = [...localGame.players].sort((a, b) => b.score - a.score);
+        resultList.innerHTML = '';
+        ranking.forEach((p, idx) => {
+          const row = document.createElement('div');
+          row.className = 'result-row';
+          row.innerHTML =
+            '<div><strong>' +
+            (idx + 1) +
+            '. ' +
+            p.name +
+            '</strong><div class="small">答对 ' +
+            p.correct +
+            ' · 答错 ' +
+            p.wrong +
+            '</div></div><strong>' +
+            p.score +
+            ' 分</strong>';
+          resultList.appendChild(row);
+        });
+
+        openResult();
+      }
+
+      function startLocalGameFromSnapshot(snapshot) {
+        localGame = {
+          mode: snapshot.mode,
+          rounds: snapshot.rounds,
+          seconds: snapshot.seconds,
+          players: snapshot.players.map((name) => ({
+            name,
+            score: 0,
+            correct: 0,
+            wrong: 0,
+          })),
+          roundIndex: 0,
+          playerIndex: 0,
+          phase: 'handoff',
+          turnEndsAt: 0,
+          quizPool: shuffle(QUIZ_PROMPTS),
+          activeQuiz: null,
+          quizAnswered: false,
+          memoryDeck: [],
+          memoryOpen: [],
+          memoryBusy: false,
+          memoryScore: 0,
+        };
+
+        openPlay();
+        showHandoff();
+      }
+
+      function startLocalGame() {
+        const names = parsePlayers(playersInput.value);
+        if (names.length < 2) {
+          setHint(setupHint, '至少输入 2 位玩家姓名（每行一个）', 'bad');
+          return;
+        }
+
+        const mode = localGameSelect.value === 'memory' ? 'memory' : 'quiz';
+        const setup = normalizeSetup(mode, localRoundsInput.value, localSecondsInput.value);
+        restartSnapshot = {
+          mode: setup.mode,
+          rounds: setup.rounds,
+          seconds: setup.seconds,
+          players: names,
+        };
+        setHint(setupHint, '', '');
+        startLocalGameFromSnapshot(restartSnapshot);
+      }
+
+      localGameSelect.addEventListener('change', () => {
+        const mode = localGameSelect.value === 'memory' ? 'memory' : 'quiz';
+        localLimitsText.textContent = limitText(mode);
+      });
+
+      beginTurnBtn.addEventListener('click', startTurn);
+      startLocalBtn.addEventListener('click', startLocalGame);
+      restartBtn.addEventListener('click', () => {
+        if (!restartSnapshot) {
+          openSetup();
+          return;
+        }
+        startLocalGameFromSnapshot(restartSnapshot);
+      });
+
+      localLimitsText.textContent = limitText(localGameSelect.value);
+      playersInput.value = ['阿明', '小红', '爷爷', '奶奶'].join('\n');
+      openSetup();
+    </script>
+  </body>
+</html>

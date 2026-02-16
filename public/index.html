@@ -137,6 +137,13 @@
         color: #ffe5ba;
       }
 
+      a.btn {
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
       .btn:disabled {
         opacity: 0.55;
         cursor: not-allowed;
@@ -384,7 +391,10 @@
             <button id="createBtn" class="btn">创建房间</button>
             <button id="joinBtn" class="btn secondary">加入房间</button>
           </div>
-          <button id="refreshBtn" class="btn secondary">刷新大厅</button>
+          <div class="grid2">
+            <button id="refreshBtn" class="btn secondary">刷新大厅</button>
+            <a class="btn secondary" href="/local.html">单机多人模式</a>
+          </div>
         </div>
 
         <p class="small" style="margin-top: 12px">大厅房间列表：</p>
@@ -478,7 +488,7 @@
         <p id="roomHint" class="hint"></p>
       </section>
 
-      <p class="footer">直接访问：`http://你的IP:3000/`，无需再输入长路径。</p>
+      <p class="footer">直接访问：`http://你的IP:3300/`，无需再输入长路径。</p>
     </main>
 
     <script src="/socket.io/socket.io.js"></script>
