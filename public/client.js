@@ -15,6 +15,12 @@ const el = {
   tableNotice: $('tableNotice'),
 
   nameInput: $('nameInput'),
+  openCreatePanelBtn: $('openCreatePanelBtn'),
+  openJoinPanelBtn: $('openJoinPanelBtn'),
+  closeCreatePanelBtn: $('closeCreatePanelBtn'),
+  closeJoinPanelBtn: $('closeJoinPanelBtn'),
+  createPanel: $('createPanel'),
+  joinPanel: $('joinPanel'),
   createRoomNameInput: $('createRoomNameInput'),
   createPasswordInput: $('createPasswordInput'),
   createSessionInput: $('createSessionInput'),
@@ -142,6 +148,21 @@ function ensureNickname() {
   el.nameInput.value = asked;
   persistName();
   return asked;
+}
+
+function closeLobbyPanels() {
+  el.createPanel.classList.add('hidden');
+  el.joinPanel.classList.add('hidden');
+}
+
+function openCreatePanel() {
+  el.joinPanel.classList.add('hidden');
+  el.createPanel.classList.remove('hidden');
+}
+
+function openJoinPanel() {
+  el.createPanel.classList.add('hidden');
+  el.joinPanel.classList.remove('hidden');
 }
 
 function roomPlayerById(id) {
@@ -920,6 +941,7 @@ socket.on('connect_error', () => {
 socket.on('joinedRoom', ({ playerId }) => {
   meId = playerId;
   replayState = null;
+  closeLobbyPanels();
   el.lobbyView.classList.add('hidden');
   el.tableView.classList.remove('hidden');
   showNotice(el.notice, '');
@@ -953,6 +975,22 @@ socket.on('kicked', (payload) => {
 
 socket.on('errorMessage', (msg) => {
   showNotice(el.tableView.classList.contains('hidden') ? el.notice : el.tableNotice, msg);
+});
+
+el.openCreatePanelBtn.addEventListener('click', () => {
+  openCreatePanel();
+});
+
+el.openJoinPanelBtn.addEventListener('click', () => {
+  openJoinPanel();
+});
+
+el.closeCreatePanelBtn.addEventListener('click', () => {
+  closeLobbyPanels();
+});
+
+el.closeJoinPanelBtn.addEventListener('click', () => {
+  closeLobbyPanels();
 });
 
 el.createBtn.addEventListener('click', () => {
@@ -995,6 +1033,7 @@ el.leaveBtn.addEventListener('click', () => {
   socket.emit('leaveRoom');
   roomState = null;
   replayState = null;
+  closeLobbyPanels();
   el.tableView.classList.add('hidden');
   el.lobbyView.classList.remove('hidden');
   socket.emit('listRooms');
@@ -1082,6 +1121,7 @@ loadName();
   const room = (params.get('room') || '').trim().toUpperCase();
   if (room) {
     el.joinRoomInput.value = room;
+    openJoinPanel();
     showNotice(el.notice, `已填入邀请房间号：${room}`);
   }
 })();
