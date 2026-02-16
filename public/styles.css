@@ -144,6 +144,25 @@ label.check {
   margin-bottom: 8px;
 }
 
+.create-row-two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.create-row-quad {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.create-row-mix {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.create-row-mix .check {
+  margin-top: 6px;
+}
+
 input {
   width: 100%;
   border-radius: 10px;
@@ -580,6 +599,37 @@ input:focus {
   .card {
     padding: 10px;
     border-radius: 14px;
+  }
+
+  .create-card h2 {
+    margin-bottom: 8px;
+  }
+
+  .create-card h3 {
+    margin-top: 2px;
+    margin-bottom: 8px;
+  }
+
+  .create-row-two,
+  .create-row-quad,
+  .create-row-mix {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .create-row-mix .check {
+    margin-top: 0;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.05);
+    min-height: 44px;
+  }
+
+  .create-card .btn.primary {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 15px;
   }
 
   .status-row {
