@@ -115,6 +115,7 @@ const el = {
   blindText: $('blindText'),
   blindLevelText: $('blindLevelText'),
   nextBlindText: $('nextBlindText'),
+  straddleStateText: $('straddleStateText'),
   turnWarning: $('turnWarning'),
 
   communityCards: $('communityCards'),
@@ -1803,7 +1804,7 @@ function renderActions() {
     if (isMobileView() && uiActionPanelCollapsed) {
       setActionPanelCollapsed(false, false);
     }
-    showHandBanner('轮到你行动', 'ok', 1000);
+    showHandBanner(actionState.mode === 'straddle' ? '轮到你决定 straddle' : '轮到你行动', 'ok', 1100);
     playTurnCue();
     triggerActionCue();
   }
@@ -1939,6 +1940,17 @@ function renderStatus() {
   el.bbText.textContent = `BB ${roomMemberName(g?.bigBlindId)}`;
   el.blindText.textContent = `盲注 ${blind.smallBlind} / ${blind.bigBlind}`;
   el.blindLevelText.textContent = `级别 L${blind.level || 1}`;
+  if (el.straddleStateText) {
+    if (!roomState.settings.allowStraddle) {
+      el.straddleStateText.textContent = 'straddle 关闭';
+    } else if (g?.awaitingStraddle) {
+      el.straddleStateText.textContent = `straddle 进行中：${roomMemberName(g.straddlePlayerId)}`;
+    } else if (g && !g.finished) {
+      el.straddleStateText.textContent = 'straddle 开启（翻牌前）';
+    } else {
+      el.straddleStateText.textContent = 'straddle 开启';
+    }
+  }
   if (roomState.settings.tournamentMode && blind.nextLevelAt) {
     const left = Math.max(0, Math.ceil((blind.nextLevelAt - nowByServer()) / 1000));
     el.nextBlindText.textContent = `下级别 ${fmtClock(left)}`;
