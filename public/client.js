@@ -31,6 +31,10 @@ let trackedCommunityHandNo = null;
 let trackedCommunityCount = 0;
 let trackedSeatDealHandNo = null;
 let trackedTurnCueToken = null;
+let raiseUiExpanded = false;
+let preActionMode = null;
+let preActionToken = null;
+let actionCueTimer = null;
 let audioCtx = null;
 let swipeStart = null;
 
@@ -138,6 +142,11 @@ const el = {
   betRangeLabel: $('betRangeLabel'),
   betRangeValue: $('betRangeValue'),
   betRangeInput: $('betRangeInput'),
+  raiseCollapseBtn: $('raiseCollapseBtn'),
+  preActionBox: $('preActionBox'),
+  preCheckFoldBtn: $('preCheckFoldBtn'),
+  preCheckBtn: $('preCheckBtn'),
+  preActionClearBtn: $('preActionClearBtn'),
   straddleBox: $('straddleBox'),
   foldBtn: $('foldBtn'),
   checkBtn: $('checkBtn'),
@@ -1480,7 +1489,6 @@ function calcQuickRaiseTarget(actionState, ratio) {
 
 function updateBetRange(actionState, rawValue) {
   const canBetOrRaise = Boolean(actionState && (actionState.canBet || actionState.canRaise));
-  el.raiseControlBox.classList.toggle('hidden', !canBetOrRaise);
   if (!canBetOrRaise) {
     el.betInput.value = '';
     el.betRangeValue.textContent = '0';
@@ -1505,7 +1513,7 @@ function updateBetRange(actionState, rawValue) {
 }
 
 function renderQuickRaiseButtons(actionState) {
-  const canQuick = Boolean(actionState && (actionState.canBet || actionState.canRaise));
+  const canQuick = Boolean(actionState && (actionState.canBet || actionState.canRaise) && raiseUiExpanded);
   el.quickRaiseBox.classList.toggle('hidden', !canQuick);
   if (!canQuick) return;
 
@@ -1538,29 +1546,128 @@ function syncQuickRaiseActive() {
   });
 }
 
+function triggerActionCue() {
+  if (!el.actionPanel) return;
+  el.actionPanel.classList.remove('turn-cue');
+  void el.actionPanel.offsetWidth;
+  el.actionPanel.classList.add('turn-cue');
+  if (actionCueTimer) clearTimeout(actionCueTimer);
+  actionCueTimer = setTimeout(() => {
+    el.actionPanel.classList.remove('turn-cue');
+  }, 1300);
+}
+
+function isWaitingForTurn() {
+  if (!roomState?.game || roomState.game.finished) return false;
+  if (roomState.myRole !== 'player') return false;
+  const me = roomPlayerById(meId);
+  if (!me || !me.inHand || me.folded || me.allIn) return false;
+  return roomState.game.turnId !== meId;
+}
+
+function preActionLabel(mode) {
+  if (mode === 'checkfold') return '过牌/弃牌';
+  if (mode === 'check') return '仅过牌';
+  return '';
+}
+
+function renderPreActionBox(visible) {
+  el.preActionBox.classList.toggle('hidden', !visible);
+  el.preCheckFoldBtn.classList.toggle('active', preActionMode === 'checkfold');
+  el.preCheckBtn.classList.toggle('active', preActionMode === 'check');
+  el.preActionClearBtn.disabled = !preActionMode;
+}
+
+function clearPreAction(resetToken = false) {
+  preActionMode = null;
+  if (resetToken) preActionToken = null;
+}
+
+function tryAutoPreAction(actionState) {
+  if (!preActionMode || !actionState || actionPending) return false;
+  if (actionState.mode !== 'normal') {
+    clearPreAction(false);
+    return false;
+  }
+
+  const token = `${roomState?.game?.handNo || 0}-${roomState?.game?.phase || ''}-${roomState?.game?.turnId || ''}-${actionState.toCall}`;
+  if (preActionToken === token) return false;
+
+  let action = null;
+  if (preActionMode === 'checkfold') {
+    action = actionState.canCheck && actionState.toCall === 0 ? 'check' : 'fold';
+  } else if (preActionMode === 'check') {
+    if (actionState.canCheck && actionState.toCall === 0) {
+      action = 'check';
+    } else {
+      showHandBanner('提前操作“仅过牌”条件不满足，已取消', 'error', 1400);
+      clearPreAction(false);
+      renderPreActionBox(false);
+      return false;
+    }
+  }
+
+  if (!action) return false;
+  preActionToken = token;
+  clearPreAction(false);
+  renderPreActionBox(false);
+  showHandBanner(`提前操作：自动${action === 'check' ? '过牌' : '弃牌'}`, 'ok', 1100);
+  sendPlayerAction({ action });
+  return true;
+}
+
 function renderActions() {
   const actionState = roomState?.actionState;
-  if (!actionState) {
+  const waitingForTurn = !actionState && isWaitingForTurn();
+  if (!actionState && !waitingForTurn) {
     setActionPending(false);
+    raiseUiExpanded = false;
+    clearPreAction(true);
     el.actionPanel.classList.add('hidden');
     el.actionMiniText.classList.add('hidden');
+    renderPreActionBox(false);
+    return;
+  }
+
+  if (waitingForTurn) {
+    raiseUiExpanded = false;
+    el.actionPanel.classList.remove('hidden');
+    applyActionPanelCollapsed();
+    el.normalActionBox.classList.add('hidden');
+    el.straddleBox.classList.add('hidden');
+    el.raiseControlBox.classList.add('hidden');
+    el.quickRaiseBox.classList.add('hidden');
+    el.actionInfo.textContent = preActionMode
+      ? `已设置提前操作：${preActionLabel(preActionMode)}`
+      : '等待轮到你，可先设置提前操作';
+    el.actionMiniText.textContent = preActionMode ? `提前操作：${preActionLabel(preActionMode)}` : '可设置提前操作';
+    el.actionMiniText.classList.toggle('hidden', !uiActionPanelCollapsed);
+    renderPreActionBox(true);
+    return;
+  }
+
+  if (tryAutoPreAction(actionState)) {
     return;
   }
 
   const cueToken = `${roomState?.game?.handNo || 0}-${roomState?.game?.phase || ''}-${roomState?.game?.turnId || ''}-${actionState.mode}`;
   if (cueToken !== trackedTurnCueToken) {
     trackedTurnCueToken = cueToken;
+    raiseUiExpanded = false;
     if (isMobileView() && uiActionPanelCollapsed) {
       setActionPanelCollapsed(false, false);
     }
     showHandBanner('轮到你行动', 'ok', 1000);
     playTurnCue();
+    triggerActionCue();
   }
 
   el.actionPanel.classList.remove('hidden');
   applyActionPanelCollapsed();
+  renderPreActionBox(false);
 
   if (actionState.mode === 'straddle') {
+    raiseUiExpanded = false;
     el.normalActionBox.classList.add('hidden');
     el.straddleBox.classList.remove('hidden');
     el.quickRaiseBox.classList.add('hidden');
@@ -1605,11 +1712,27 @@ function renderActions() {
   el.callBtn.classList.toggle('hidden', !showCall);
   el.betBtn.classList.toggle('hidden', !canBetOrRaise);
 
-  el.betBtn.textContent = actionState.canBet ? '下注' : actionState.canRaise ? '加注' : '下注/加注';
+  if (!canBetOrRaise) raiseUiExpanded = false;
+  el.raiseControlBox.classList.toggle('hidden', !(canBetOrRaise && raiseUiExpanded));
+  el.quickRaiseBox.classList.toggle('hidden', !(canBetOrRaise && raiseUiExpanded));
+  el.betBtn.textContent = !raiseUiExpanded
+    ? actionState.canBet
+      ? '下注'
+      : actionState.canRaise
+        ? '加注'
+        : '下注/加注'
+    : actionState.canBet
+      ? `确认下注 ${el.betRangeValue.textContent}`
+      : `确认加注 ${el.betRangeValue.textContent}`;
   el.callBtn.classList.toggle('primary', showCall);
   el.checkBtn.classList.toggle('primary', showCheck);
   el.betBtn.classList.toggle('primary', !showCall);
   updateBetRange(actionState, el.betInput.value || minTo);
+  if (raiseUiExpanded) {
+    el.betBtn.textContent = actionState.canBet
+      ? `确认下注 ${el.betRangeValue.textContent}`
+      : `确认加注 ${el.betRangeValue.textContent}`;
+  }
   el.betBtn.disabled = !canBetOrRaise || actionPending;
   renderQuickRaiseButtons(actionState);
   syncQuickRaiseActive();
@@ -1624,14 +1747,19 @@ function renderStatus() {
     trackedResultHandNo = null;
     trackedSeatDealHandNo = null;
     trackedTurnCueToken = null;
+    raiseUiExpanded = false;
+    clearPreAction(true);
   } else {
     if (trackedHandNo !== g.handNo) {
       trackedHandNo = g.handNo;
       trackedPhase = g.phase;
       trackedTurnCueToken = null;
+      raiseUiExpanded = false;
+      clearPreAction(true);
       showHandBanner(`第 ${g.handNo} 手牌开始`, 'ok', 1300);
     } else if (!g.finished && trackedPhase !== g.phase) {
       trackedPhase = g.phase;
+      raiseUiExpanded = false;
       showHandBanner(phaseLabel(g.phase), 'info', 1000);
     }
     if (g.finished && trackedResultHandNo !== g.handNo) {
@@ -1914,6 +2042,8 @@ socket.on('connect_error', () => {
 socket.on('joinedRoom', ({ playerId }) => {
   clearAllPending();
   setActionPending(false);
+  raiseUiExpanded = false;
+  clearPreAction(true);
   trackedHandNo = null;
   trackedPhase = null;
   trackedResultHandNo = null;
@@ -1952,6 +2082,8 @@ socket.on('handReplayData', (replay) => {
 socket.on('kicked', (payload) => {
   clearAllPending();
   setActionPending(false);
+  raiseUiExpanded = false;
+  clearPreAction(true);
   showHandBanner('');
   trackedSeatDealHandNo = null;
   trackedTurnCueToken = null;
@@ -2132,6 +2264,8 @@ el.startBtn.addEventListener('click', () => socket.emit('startHand'));
 el.leaveBtn.addEventListener('click', () => {
   clearAllPending();
   setActionPending(false);
+  raiseUiExpanded = false;
+  clearPreAction(true);
   showHandBanner('');
   trackedSeatDealHandNo = null;
   trackedTurnCueToken = null;
@@ -2166,25 +2300,44 @@ el.copyRoomBtn.addEventListener('click', async () => {
   }
 });
 
-el.foldBtn.addEventListener('click', () => sendPlayerAction({ action: 'fold' }));
+el.foldBtn.addEventListener('click', () => {
+  raiseUiExpanded = false;
+  sendPlayerAction({ action: 'fold' });
+});
 el.checkBtn.addEventListener('click', () => {
   const actionState = roomState?.actionState;
   if (!actionState || !(actionState.canCheck && actionState.toCall === 0)) return;
+  raiseUiExpanded = false;
   sendPlayerAction({ action: 'check' });
 });
 el.callBtn.addEventListener('click', () => {
   const actionState = roomState?.actionState;
   if (!actionState || !(actionState.canCall && actionState.toCall > 0)) return;
+  raiseUiExpanded = false;
   sendPlayerAction({ action: 'call' });
 });
-el.allinBtn.addEventListener('click', () => sendPlayerAction({ action: 'allin' }));
+el.allinBtn.addEventListener('click', () => {
+  raiseUiExpanded = false;
+  sendPlayerAction({ action: 'allin' });
+});
 
 el.betBtn.addEventListener('click', () => {
   const actionState = roomState?.actionState;
   if (!actionState || !(actionState.canBet || actionState.canRaise)) return;
+  if (!raiseUiExpanded) {
+    raiseUiExpanded = true;
+    renderActions();
+    return;
+  }
   const amount = parseNum(el.betRangeInput.value || el.betInput.value, 0);
   const action = actionState.canBet ? 'bet' : 'raise';
+  raiseUiExpanded = false;
   sendPlayerAction({ action, amount });
+});
+
+el.raiseCollapseBtn.addEventListener('click', () => {
+  raiseUiExpanded = false;
+  if (roomState) renderActions();
 });
 
 quickRaiseButtons.forEach((btn) => {
@@ -2194,6 +2347,7 @@ quickRaiseButtons.forEach((btn) => {
     if (!target) return;
     updateBetRange(roomState.actionState, target);
     const action = roomState.actionState.canBet ? 'bet' : 'raise';
+    raiseUiExpanded = false;
     sendPlayerAction({ action, amount: target });
   });
 });
@@ -2207,7 +2361,31 @@ el.betInput.addEventListener('input', () => {
 el.betRangeInput.addEventListener('input', () => {
   if (!roomState?.actionState) return;
   updateBetRange(roomState.actionState, el.betRangeInput.value);
+  raiseUiExpanded = true;
+  if (roomState) renderActions();
   syncQuickRaiseActive();
+});
+
+el.preCheckFoldBtn.addEventListener('click', () => {
+  if (!isWaitingForTurn()) return;
+  preActionMode = 'checkfold';
+  preActionToken = null;
+  showHandBanner('已设置提前操作：过牌/弃牌', 'ok', 900);
+  renderActions();
+});
+
+el.preCheckBtn.addEventListener('click', () => {
+  if (!isWaitingForTurn()) return;
+  preActionMode = 'check';
+  preActionToken = null;
+  showHandBanner('已设置提前操作：仅过牌', 'ok', 900);
+  renderActions();
+});
+
+el.preActionClearBtn.addEventListener('click', () => {
+  clearPreAction(false);
+  showHandBanner('已取消提前操作', 'info', 700);
+  if (roomState) renderActions();
 });
 
 el.straddleBtn.addEventListener('click', () => {

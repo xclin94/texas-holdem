@@ -236,10 +236,13 @@
                   <button id="callBtn" class="btn">跟注</button>
                   <button id="betBtn" class="btn primary">加注到</button>
                 </div>
-                <div id="raiseControlBox" class="raise-control">
+                <div id="raiseControlBox" class="raise-control hidden">
                   <div class="raise-head">
                     <span id="betRangeLabel">加注到</span>
-                    <strong id="betRangeValue">0</strong>
+                    <div class="raise-head-actions">
+                      <strong id="betRangeValue">0</strong>
+                      <button id="raiseCollapseBtn" class="btn tiny ghost">收起</button>
+                    </div>
                   </div>
                   <input id="betRangeInput" type="range" min="0" max="0" step="1" />
                   <input id="betInput" class="hidden" type="number" min="0" step="1" />
@@ -255,6 +258,14 @@
                   <button class="btn tiny quick-raise-btn" data-pot-ratio="1">1池</button>
                   <button class="btn tiny quick-raise-btn" data-pot-ratio="1.5">1.5池</button>
                   <button class="btn tiny quick-raise-btn" data-pot-ratio="2">2池</button>
+                </div>
+              </div>
+              <div id="preActionBox" class="pre-action hidden">
+                <p class="hint">提前操作（到你时自动执行一次）</p>
+                <div class="actions pre-action-row">
+                  <button id="preCheckFoldBtn" class="btn tiny">过牌/弃牌</button>
+                  <button id="preCheckBtn" class="btn tiny">仅过牌</button>
+                  <button id="preActionClearBtn" class="btn tiny ghost">取消</button>
                 </div>
               </div>
 

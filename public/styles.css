@@ -888,6 +888,12 @@ input[type='checkbox'] {
 .action-panel {
   position: relative;
   z-index: 3300;
+  transition: box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.action-panel.turn-cue {
+  border-color: rgba(232, 187, 97, 0.7);
+  box-shadow: 0 0 0 2px rgba(232, 187, 97, 0.18);
 }
 
 .action-mini {
@@ -917,6 +923,9 @@ input[type='checkbox'] {
 .action-main-row .btn {
   flex: 1 1 0;
   min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .action-sub-row .btn {
@@ -944,6 +953,12 @@ input[type='checkbox'] {
 .raise-head strong {
   color: #ffe8b4;
   font-size: 16px;
+}
+
+.raise-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 #betRangeInput {
@@ -997,6 +1012,29 @@ input[type='checkbox'] {
   border-color: rgba(232, 187, 97, 0.6);
   background: rgba(232, 187, 97, 0.22);
   color: #ffe8b4;
+}
+
+.pre-action {
+  margin-top: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+  padding: 8px;
+}
+
+.pre-action .hint {
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.pre-action-row .btn.active {
+  border-color: rgba(232, 187, 97, 0.62);
+  background: rgba(232, 187, 97, 0.24);
+  color: #ffe8b4;
+}
+
+.action-panel.turn-cue .action-main-row .btn:not(.hidden) {
+  animation: actionBtnCue 360ms ease;
 }
 
 .turn-timer-urgent {
@@ -1117,6 +1155,18 @@ input[type='checkbox'] {
   }
   50% {
     opacity: 0.55;
+  }
+}
+
+@keyframes actionBtnCue {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  45% {
+    transform: translateY(-1px) scale(1.04);
+  }
+  100% {
+    transform: translateY(0) scale(1);
   }
 }
 
