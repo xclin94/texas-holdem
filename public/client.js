@@ -356,8 +356,15 @@ function setActionPanelCollapsed(next, persist = true) {
 
 function applySideLayout() {
   if (!el.tableGrid || !el.sidePanel) return;
-  el.tableGrid.classList.toggle('side-collapsed', uiSideCollapsed);
+  const drawerMode = useSideDrawerMode();
+  const drawerOpen = drawerMode && !uiSideCollapsed;
+  el.tableGrid.classList.toggle('side-collapsed', uiSideCollapsed || drawerMode);
+  el.tableGrid.classList.toggle('side-drawer-open', drawerOpen);
   el.sidePanel.classList.toggle('hidden', uiSideCollapsed);
+  document.body.classList.toggle('side-drawer-open', drawerOpen);
+  if (drawerOpen) {
+    el.sidePanel.scrollTop = 0;
+  }
   refreshSideButton();
 }
 
@@ -815,6 +822,10 @@ function isLandscapePhoneView() {
 
 function isNarrowMobileView() {
   return window.innerWidth <= 420 || (isLandscapePhoneView() && window.innerHeight <= 430);
+}
+
+function useSideDrawerMode() {
+  return window.innerWidth <= 1080;
 }
 
 function compactStackText(value) {
@@ -1921,6 +1932,15 @@ el.motionToggleBtn.addEventListener('click', () => {
 
 el.sideToggleBtn.addEventListener('click', () => {
   setSideCollapsed(!uiSideCollapsed, true);
+});
+
+document.addEventListener('click', (evt) => {
+  if (uiSideCollapsed || !useSideDrawerMode() || !roomState) return;
+  const target = evt.target;
+  if (!(target instanceof Element)) return;
+  if (el.sidePanel.contains(target)) return;
+  if (el.sideToggleBtn.contains(target)) return;
+  setSideCollapsed(true, true);
 });
 
 el.actionPanelToggleBtn.addEventListener('click', () => {

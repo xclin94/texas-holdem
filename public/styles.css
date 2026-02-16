@@ -143,6 +143,10 @@ body[data-motion='reduced'] .card-face.deal-seat {
   grid-template-columns: 1fr;
 }
 
+body.side-drawer-open {
+  overflow: hidden;
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--line);
@@ -1263,6 +1267,20 @@ input[type='checkbox'] {
   .seat-node {
     width: 150px;
   }
+
+  .table-grid.side-drawer-open #sidePanel {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 64px);
+    left: calc(env(safe-area-inset-left, 0px) + 8px);
+    right: calc(env(safe-area-inset-right, 0px) + 8px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+    z-index: 6900;
+    margin: 0;
+    overflow: auto;
+    box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55);
+    border-color: rgba(232, 187, 97, 0.46);
+    background: linear-gradient(180deg, rgba(11, 35, 24, 0.98), rgba(5, 18, 12, 0.98));
+  }
 }
 
 @media (max-width: 760px) {
@@ -1670,6 +1688,13 @@ input[type='checkbox'] {
     bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
     width: min(42vw, 320px);
     max-height: none;
+  }
+
+  .table-grid.side-drawer-open #sidePanel {
+    top: calc(env(safe-area-inset-top, 0px) + 56px);
+    left: calc(env(safe-area-inset-left, 0px) + 8px);
+    right: calc(env(safe-area-inset-right, 0px) + 8px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
   }
 
   .action-panel.collapsed {
