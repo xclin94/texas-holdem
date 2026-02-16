@@ -891,6 +891,57 @@ input[type='checkbox'] {
   background: #1e7b40;
 }
 
+.badge.role-dealer {
+  background: linear-gradient(140deg, rgba(236, 178, 74, 0.95), rgba(255, 226, 143, 0.95));
+  color: #221707;
+  font-weight: 800;
+}
+
+.badge.role-sb {
+  background: linear-gradient(140deg, rgba(113, 198, 255, 0.9), rgba(180, 228, 255, 0.9));
+  color: #082033;
+  font-weight: 800;
+}
+
+.badge.role-bb {
+  background: linear-gradient(140deg, rgba(255, 134, 116, 0.92), rgba(255, 195, 176, 0.92));
+  color: #300b06;
+  font-weight: 800;
+}
+
+.seat-bet-chip {
+  margin-top: 4px;
+  margin-bottom: 2px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ddeee2;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.seat-bet-chip.active {
+  border-color: rgba(255, 226, 150, 0.9);
+  background: linear-gradient(140deg, rgba(232, 187, 97, 0.86), rgba(255, 227, 152, 0.88));
+  color: #1c1409;
+  box-shadow: 0 0 0 1px rgba(255, 236, 190, 0.3);
+}
+
+.seat-node.compact .seat-bet-chip {
+  font-size: 10px;
+  padding: 1px 6px;
+  margin-top: 2px;
+  margin-bottom: 1px;
+}
+
+.seat-node.dense .seat-bet-chip {
+  font-size: 9px;
+  padding: 1px 5px;
+}
+
 .action-panel,
 .result-panel,
 .config-box {

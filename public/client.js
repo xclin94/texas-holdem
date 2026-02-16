@@ -1194,11 +1194,14 @@ function renderSeatMap() {
 
     const badges = document.createElement('div');
     badges.className = 'badges';
-    const badgeLimit = compact ? 3 : 99;
+    const badgeLimit = compact ? 4 : 99;
     const pushBadge = (text, klass = '') => {
       if (badges.childElementCount >= badgeLimit) return;
       addBadge(badges, text, klass);
     };
+    if (roomState.game?.dealerId === p.id) pushBadge(compact ? '庄' : '庄家', 'role-dealer');
+    if (roomState.game?.smallBlindId === p.id) pushBadge(compact ? 'SB' : '小盲', 'role-sb');
+    if (roomState.game?.bigBlindId === p.id) pushBadge(compact ? 'BB' : '大盲', 'role-bb');
     if (compact) pushBadge(pos, 'gold');
     if (p.id === roomState.hostId) pushBadge(compact ? '房' : '房主', 'gold');
     if (roomState.game?.turnId === p.id && !roomState.game?.finished) pushBadge(compact ? '行动' : '行动中', 'ok');
@@ -1223,6 +1226,11 @@ function renderSeatMap() {
       act.textContent = p.lastAction || '等待中';
     }
 
+    const streetBet = Math.max(0, Number(p.betThisStreet) || 0);
+    const betChip = document.createElement('div');
+    betChip.className = `seat-bet-chip${streetBet > 0 ? ' active' : ''}`;
+    betChip.textContent = compact ? (streetBet > 0 ? `轮+${streetBet}` : '轮+0') : `本轮 +${streetBet}`;
+
     const cards = document.createElement('div');
     cards.className = 'seat-cards';
     const showCompactCards = !compact || p.id === meId || roomState.game?.finished;
@@ -1241,6 +1249,7 @@ function renderSeatMap() {
 
     node.appendChild(head);
     node.appendChild(badges);
+    node.appendChild(betChip);
     node.appendChild(sub);
     if (act) node.appendChild(act);
     if (cards.children.length > 0) {
