@@ -3,24 +3,26 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 
-const PORT = Number(process.env.PARTY_PORT || 3300);
+const PORT = Number(process.env.PARTY_PORT || 3000);
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const MAX_PLAYERS = 20;
-const DEFAULT_ROUNDS = 8;
-const DEFAULT_SECONDS = 12;
 
-const GAME_MODES = Object.freeze({
-  MIX: 'mix',
+const GAME_TYPES = Object.freeze({
   QUIZ: 'quiz',
-  MATH: 'math',
-  FIND: 'find',
+  MEMORY: 'memory',
+  DRAW: 'draw',
 });
 
-const MODE_LABELS = Object.freeze({
-  [GAME_MODES.MIX]: '混合小游戏',
-  [GAME_MODES.QUIZ]: '新春知识题',
-  [GAME_MODES.MATH]: '心算冲刺',
-  [GAME_MODES.FIND]: '找字手速',
+const GAME_LABELS = Object.freeze({
+  [GAME_TYPES.QUIZ]: '快问快答',
+  [GAME_TYPES.MEMORY]: '翻牌冲刺',
+  [GAME_TYPES.DRAW]: '你画我猜',
+});
+
+const DEFAULT_SETUP = Object.freeze({
+  selectedGame: GAME_TYPES.MEMORY,
+  rounds: 3,
+  seconds: 20,
 });
 
 const QUIZ_PROMPTS = [
@@ -36,27 +38,47 @@ const QUIZ_PROMPTS = [
   { question: '春节走亲访友时，常见第一句话是？', correct: '新年好', wrongs: ['晚安', '辛苦了', '再见'] },
   { question: '“团圆”在春节语境里最接近哪层含义？', correct: '家人相聚', wrongs: ['独自旅行', '加班开会', '深夜购物'] },
   { question: '下列哪个通常不是春节传统活动？', correct: '赛龙舟', wrongs: ['拜年', '贴春联', '放烟花'] },
+  { question: '春节常见“福”字倒贴，寓意是？', correct: '福到了', wrongs: ['贴错方向', '防盗记号', '门牌编号'] },
+  { question: '拜年时常见祝福语是？', correct: '万事如意', wrongs: ['一路顺风', '注意防晒', '按时睡觉'] },
 ];
 
-const FIND_SETS = [
-  { target: '福', decoys: ['春', '喜', '财', '禄', '旺', '安'] },
-  { target: '春', decoys: ['泰', '安', '乐', '福', '祥', '庆'] },
-  { target: '财', decoys: ['福', '禄', '旺', '富', '禧', '喜'] },
-  { target: '喜', decoys: ['囍', '禧', '嘉', '庆', '福', '吉'] },
-  { target: '安', decoys: ['宁', '福', '康', '泰', '和', '乐'] },
-  { target: '旺', decoys: ['盛', '发', '财', '兴', '昌', '隆'] },
+const DRAW_WORDS = [
+  '红包',
+  '烟花',
+  '春联',
+  '饺子',
+  '汤圆',
+  '舞狮',
+  '灯笼',
+  '鞭炮',
+  '团圆饭',
+  '福字',
+  '年夜饭',
+  '拜年',
+  '窗花',
+  '财神',
+  '压岁钱',
+  '舞龙',
+  '春晚',
+  '吉祥',
+  '元宵',
+  '糖葫芦',
 ];
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-const partyRooms = new Map();
+const rooms = new Map();
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.get('/api/lobby', (_req, res) => {
+  res.json(buildLobbyPayload());
+});
+
 app.get('/', (_req, res) => {
-  res.redirect('/chuxi-quiz-battle.html');
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 function clampInt(value, min, max, fallback) {
@@ -75,29 +97,52 @@ function sanitizeRoomTitle(name) {
   return name.trim().slice(0, 24);
 }
 
-function sanitizeMode(value) {
-  const mode = String(value || '').trim().toLowerCase();
-  if (mode === GAME_MODES.QUIZ || mode === GAME_MODES.MATH || mode === GAME_MODES.FIND) return mode;
-  return GAME_MODES.MIX;
+function sanitizeGameType(value) {
+  const v = String(value || '').trim().toLowerCase();
+  if (v === GAME_TYPES.QUIZ || v === GAME_TYPES.MEMORY || v === GAME_TYPES.DRAW) {
+    return v;
+  }
+  return DEFAULT_SETUP.selectedGame;
 }
 
-function roomChannel(code) {
-  return `party:${code}`;
+function normalizeSetup(payload = {}, base = DEFAULT_SETUP) {
+  const selectedGame = sanitizeGameType(payload.selectedGame || base.selectedGame);
+
+  const limits = {
+    [GAME_TYPES.QUIZ]: { roundsMin: 3, roundsMax: 12, secMin: 8, secMax: 25 },
+    [GAME_TYPES.MEMORY]: { roundsMin: 1, roundsMax: 8, secMin: 10, secMax: 45 },
+    [GAME_TYPES.DRAW]: { roundsMin: 1, roundsMax: 12, secMin: 20, secMax: 120 },
+  };
+
+  const l = limits[selectedGame];
+  return {
+    selectedGame,
+    rounds: clampInt(payload.rounds, l.roundsMin, l.roundsMax, clampInt(base.rounds, l.roundsMin, l.roundsMax, l.roundsMin)),
+    seconds: clampInt(payload.seconds, l.secMin, l.secMax, clampInt(base.seconds, l.secMin, l.secMax, l.secMin)),
+  };
 }
 
 function shuffle(list) {
   const arr = [...list];
   for (let i = arr.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
-    const tmp = arr[i];
+    const t = arr[i];
     arr[i] = arr[j];
-    arr[j] = tmp;
+    arr[j] = t;
   }
   return arr;
 }
 
 function pickRandom(list) {
   return list[Math.floor(Math.random() * list.length)];
+}
+
+function roomChannel(code) {
+  return `party:${code}`;
+}
+
+function gameLabel(type) {
+  return GAME_LABELS[type] || GAME_LABELS[DEFAULT_SETUP.selectedGame];
 }
 
 function makeRoomCode() {
@@ -111,21 +156,23 @@ function makeRoomCode() {
 function allocateRoomCode() {
   for (let i = 0; i < 1000; i += 1) {
     const code = makeRoomCode();
-    if (!partyRooms.has(code)) return code;
+    if (!rooms.has(code)) return code;
   }
   throw new Error('room-code-exhausted');
+}
+
+function getHostName(room) {
+  const host = room.players.find((p) => p.id === room.hostId);
+  return host ? host.name : '未知';
 }
 
 function ensureUniqueName(room, rawName) {
   const base = sanitizeName(rawName) || '玩家';
   const used = new Set(room.players.map((p) => p.name));
   if (!used.has(base)) return base;
-
-  let suffix = 2;
-  while (suffix <= 99) {
-    const candidate = `${base}${suffix}`;
-    if (!used.has(candidate)) return candidate;
-    suffix += 1;
+  for (let i = 2; i <= 99; i += 1) {
+    const n = `${base}${i}`;
+    if (!used.has(n)) return n;
   }
   return `${base}${Date.now() % 100}`;
 }
@@ -137,32 +184,52 @@ function clearRoomTimer(room) {
   }
 }
 
-function getRoomHostName(room) {
-  const host = room.players.find((p) => p.id === room.hostId);
-  return host ? host.name : '未知';
+function resetPlayersForNewGame(room) {
+  room.players.forEach((p) => {
+    p.score = 0;
+    p.correct = 0;
+    p.wrong = 0;
+    p.lastGain = 0;
+    p.answered = false;
+    p.answerChoice = null;
+    p.roundScore = 0;
+  });
 }
 
-function modeLabel(mode) {
-  return MODE_LABELS[mode] || MODE_LABELS[GAME_MODES.MIX];
+function playerPublic(player, room) {
+  return {
+    id: player.id,
+    name: player.name,
+    isHost: player.id === room.hostId,
+    score: player.score,
+    correct: player.correct,
+    wrong: player.wrong,
+    lastGain: player.lastGain,
+    answered: player.answered,
+    answerChoice: player.answerChoice,
+    roundScore: player.roundScore,
+  };
+}
+
+function roomSummary(room) {
+  return {
+    code: room.code,
+    title: room.title,
+    hostName: getHostName(room),
+    players: room.players.length,
+    stage: room.stage,
+    selectedGame: room.setup.selectedGame,
+    selectedGameLabel: gameLabel(room.setup.selectedGame),
+    createdAt: room.createdAt,
+  };
 }
 
 function buildLobbyPayload() {
-  const rooms = [...partyRooms.values()]
-    .map((room) => ({
-      code: room.code,
-      title: room.title,
-      hostName: getRoomHostName(room),
-      players: room.players.length,
-      phase: room.phase,
-      mode: room.mode,
-      modeLabel: modeLabel(room.mode),
-      createdAt: room.createdAt,
-    }))
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .slice(0, 100);
-
   return {
-    rooms,
+    rooms: [...rooms.values()]
+      .map(roomSummary)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 100),
     serverNow: Date.now(),
   };
 }
@@ -171,48 +238,69 @@ function emitLobby() {
   io.emit('partyLobby', buildLobbyPayload());
 }
 
-function playerPublicState(player) {
+function buildSharedGameState(room) {
+  if (!room.game) return null;
+
+  const g = room.game;
+  if (g.type === GAME_TYPES.QUIZ) {
+    const reveal = g.phase === 'quiz_reveal';
+    const q = g.questions[g.roundIndex] || null;
+    return {
+      type: g.type,
+      label: gameLabel(g.type),
+      phase: g.phase,
+      roundNo: g.roundIndex + 1,
+      totalRounds: g.totalRounds,
+      roundEndsAt: g.roundEndsAt,
+      question: q ? q.question : null,
+      options: q ? q.options : [],
+      correctIndex: q && reveal ? q.answer : null,
+    };
+  }
+
+  if (g.type === GAME_TYPES.MEMORY) {
+    return {
+      type: g.type,
+      label: gameLabel(g.type),
+      phase: g.phase,
+      roundNo: g.roundIndex + 1,
+      totalRounds: g.totalRounds,
+      roundEndsAt: g.roundEndsAt,
+    };
+  }
+
+  const drawer = room.players.find((p) => p.id === g.drawerId);
   return {
-    id: player.id,
-    name: player.name,
-    score: player.score,
-    correct: player.correct,
-    wrong: player.wrong,
-    answered: player.answered,
-    answerChoice: player.answerChoice,
-    lastGain: player.lastGain,
+    type: g.type,
+    label: gameLabel(g.type),
+    phase: g.phase,
+    roundNo: g.roundIndex + 1,
+    totalRounds: g.totalRounds,
+    roundEndsAt: g.roundEndsAt,
+    drawerId: g.drawerId,
+    drawerName: drawer ? drawer.name : '未知',
+    guessedCount: g.guessed ? g.guessed.size : 0,
+    guesses: (g.guesses || []).slice(-10),
+    revealWord: g.phase === 'draw_reveal' ? g.word : null,
   };
 }
 
 function buildRoomState(room) {
-  const reveal = room.phase === 'reveal' || room.phase === 'finished';
-  const question = room.currentQuestion
-    ? {
-        kind: room.currentQuestion.kind,
-        label: room.currentQuestion.label,
-        text: room.currentQuestion.question,
-        options: room.currentQuestion.options,
-        correctIndex: reveal ? room.currentQuestion.answer : null,
-      }
-    : null;
-
   return {
     room: {
       code: room.code,
       title: room.title,
-      mode: room.mode,
-      modeLabel: modeLabel(room.mode),
-      phase: room.phase,
+      stage: room.stage,
       hostId: room.hostId,
-      hostName: getRoomHostName(room),
-      totalRounds: room.totalRounds,
-      roundSeconds: room.roundSeconds,
-      roundIndex: room.roundIndex,
-      roundNo: room.roundIndex + 1,
-      roundEndsAt: room.roundEndsAt,
-      answeredCount: room.players.filter((p) => p.answered).length,
-      players: room.players.map(playerPublicState),
-      question,
+      hostName: getHostName(room),
+      setup: {
+        selectedGame: room.setup.selectedGame,
+        selectedGameLabel: gameLabel(room.setup.selectedGame),
+        rounds: room.setup.rounds,
+        seconds: room.setup.seconds,
+      },
+      players: room.players.map((p) => playerPublic(p, room)),
+      game: buildSharedGameState(room),
     },
     serverNow: Date.now(),
   };
@@ -223,231 +311,17 @@ function emitRoom(room) {
 }
 
 function removeRoom(code) {
-  const room = partyRooms.get(code);
+  const room = rooms.get(code);
   if (!room) return;
   clearRoomTimer(room);
-  partyRooms.delete(code);
+  rooms.delete(code);
   emitLobby();
 }
 
-function withShuffledOptions(correct, wrongs) {
-  const options = shuffle([correct, ...wrongs.slice(0, 3)]);
-  return {
-    options,
-    answer: options.indexOf(correct),
-  };
-}
-
-function buildQuizQuestion() {
-  const prompt = pickRandom(QUIZ_PROMPTS);
-  const { options, answer } = withShuffledOptions(prompt.correct, prompt.wrongs);
-  return {
-    kind: GAME_MODES.QUIZ,
-    label: modeLabel(GAME_MODES.QUIZ),
-    question: prompt.question,
-    options,
-    answer,
-    baseScore: 110,
-  };
-}
-
-function buildMathQuestion() {
-  const opRoll = Math.random();
-  let a = clampInt(Math.random() * 30 + 8, 8, 37, 18);
-  let b = clampInt(Math.random() * 18 + 2, 2, 20, 6);
-  let question = '';
-  let correct = 0;
-
-  if (opRoll < 0.45) {
-    question = `${a} + ${b} = ?`;
-    correct = a + b;
-  } else if (opRoll < 0.8) {
-    if (a < b) {
-      const t = a;
-      a = b;
-      b = t;
-    }
-    question = `${a} - ${b} = ?`;
-    correct = a - b;
-  } else {
-    a = clampInt(Math.random() * 9 + 3, 3, 11, 6);
-    b = clampInt(Math.random() * 8 + 2, 2, 9, 4);
-    question = `${a} × ${b} = ?`;
-    correct = a * b;
-  }
-
-  const wrongSet = new Set();
-  while (wrongSet.size < 3) {
-    const offset = clampInt(Math.random() * 9 + 1, 1, 9, 3) * (Math.random() < 0.5 ? -1 : 1);
-    const candidate = Math.max(0, correct + offset);
-    if (candidate !== correct) wrongSet.add(candidate);
-  }
-
-  const { options, answer } = withShuffledOptions(String(correct), [...wrongSet].map((n) => String(n)));
-
-  return {
-    kind: GAME_MODES.MATH,
-    label: modeLabel(GAME_MODES.MATH),
-    question,
-    options,
-    answer,
-    baseScore: 120,
-  };
-}
-
-function buildFindQuestion() {
-  const set = pickRandom(FIND_SETS);
-  const decoys = shuffle(set.decoys).slice(0, 3);
-  const { options, answer } = withShuffledOptions(set.target, decoys);
-
-  return {
-    kind: GAME_MODES.FIND,
-    label: modeLabel(GAME_MODES.FIND),
-    question: `请快速找出“${set.target}”字`,
-    options,
-    answer,
-    baseScore: 95,
-  };
-}
-
-function buildQuestionByKind(kind) {
-  if (kind === GAME_MODES.QUIZ) return buildQuizQuestion();
-  if (kind === GAME_MODES.MATH) return buildMathQuestion();
-  return buildFindQuestion();
-}
-
-function pickRoundKinds(mode, totalRounds) {
-  if (mode !== GAME_MODES.MIX) {
-    return Array(totalRounds).fill(mode);
-  }
-
-  const kinds = [GAME_MODES.QUIZ, GAME_MODES.MATH, GAME_MODES.FIND];
-  const result = [];
-  let deck = shuffle(kinds);
-
-  for (let i = 0; i < totalRounds; i += 1) {
-    if (!deck.length) {
-      deck = shuffle(kinds);
-    }
-    result.push(deck.pop());
-  }
-
-  return result;
-}
-
-function pickQuestions(totalRounds, mode) {
-  const kinds = pickRoundKinds(mode, totalRounds);
-  return kinds.map((kind) => buildQuestionByKind(kind));
-}
-
-function resetPlayersForNewMatch(room) {
-  room.players.forEach((p) => {
-    p.score = 0;
-    p.correct = 0;
-    p.wrong = 0;
-    p.answered = false;
-    p.answerChoice = null;
-    p.lastGain = 0;
-  });
-}
-
-function startRound(room) {
-  clearRoomTimer(room);
-
-  room.phase = 'question';
-  room.roundAnswers = new Map();
-  room.currentQuestion = room.questions[room.roundIndex] || null;
-  room.roundEndsAt = Date.now() + room.roundSeconds * 1000;
-
-  room.players.forEach((p) => {
-    p.answered = false;
-    p.answerChoice = null;
-    p.lastGain = 0;
-  });
-
-  emitRoom(room);
-
-  room.timer = setTimeout(() => {
-    finalizeRound(room.code);
-  }, room.roundSeconds * 1000 + 20);
-}
-
-function finalizeRound(code) {
-  const room = partyRooms.get(code);
-  if (!room || room.phase !== 'question' || !room.currentQuestion) return;
-
-  clearRoomTimer(room);
-  room.phase = 'reveal';
-
-  const answer = room.currentQuestion.answer;
-  room.players.forEach((player) => {
-    const submission = room.roundAnswers.get(player.id);
-    player.answered = Boolean(submission);
-    player.answerChoice = submission ? submission.choice : null;
-
-    if (!submission) {
-      player.lastGain = 0;
-      return;
-    }
-
-    if (submission.choice === answer) {
-      const leftMs = Math.max(0, room.roundEndsAt - submission.at);
-      const speedBonus = Math.min(120, Math.floor(leftMs / 100));
-      const gain = room.currentQuestion.baseScore + speedBonus;
-      player.score += gain;
-      player.correct += 1;
-      player.lastGain = gain;
-    } else {
-      player.wrong += 1;
-      player.lastGain = 0;
-    }
-  });
-
-  emitRoom(room);
-
-  room.timer = setTimeout(() => {
-    nextRoundOrFinish(room.code);
-  }, 2800);
-}
-
-function nextRoundOrFinish(code) {
-  const room = partyRooms.get(code);
-  if (!room) return;
-
-  if (room.roundIndex + 1 >= room.questions.length) {
-    clearRoomTimer(room);
-    room.phase = 'finished';
-    room.roundEndsAt = null;
-    emitRoom(room);
-    emitLobby();
-    return;
-  }
-
-  room.roundIndex += 1;
-  startRound(room);
-}
-
-function startMatch(room) {
-  room.questions = pickQuestions(room.totalRounds, room.mode);
-  room.roundIndex = 0;
-  room.currentQuestion = null;
-  room.roundEndsAt = null;
-  resetPlayersForNewMatch(room);
-  startRound(room);
-  emitLobby();
-}
-
-function partyRoomOfSocket(socket) {
-  const code = socket.data.partyRoomCode;
+function findRoomOfSocket(socket) {
+  const code = socket.data.roomCode;
   if (!code) return null;
-  return partyRooms.get(code) || null;
-}
-
-function removePlayerFromRoom(room, socketId) {
-  const idx = room.players.findIndex((p) => p.id === socketId);
-  if (idx < 0) return null;
-  const [removed] = room.players.splice(idx, 1);
-  return removed;
+  return rooms.get(code) || null;
 }
 
 function maybeReassignHost(room) {
@@ -455,34 +329,46 @@ function maybeReassignHost(room) {
   room.hostId = room.players[0] ? room.players[0].id : null;
 }
 
-function leavePartyRoom(socket, silent = false) {
-  const room = partyRoomOfSocket(socket);
+function leaveRoom(socket, silent = false) {
+  const room = findRoomOfSocket(socket);
   if (!room) {
-    socket.data.partyRoomCode = null;
+    socket.data.roomCode = null;
     return;
   }
 
   socket.leave(roomChannel(room.code));
-  socket.data.partyRoomCode = null;
+  socket.data.roomCode = null;
 
-  const removed = removePlayerFromRoom(room, socket.id);
-  if (!removed) {
-    emitLobby();
-    return;
+  const idx = room.players.findIndex((p) => p.id === socket.id);
+  if (idx >= 0) {
+    room.players.splice(idx, 1);
   }
 
   maybeReassignHost(room);
 
-  if (room.players.length === 0) {
+  if (!room.players.length) {
     removeRoom(room.code);
     return;
   }
 
-  if (room.phase === 'question') {
-    const allAnswered = room.players.every((p) => p.answered);
-    if (allAnswered) {
-      finalizeRound(room.code);
-      return;
+  if (room.stage === 'playing' && room.game) {
+    if (room.game.type === GAME_TYPES.QUIZ && room.game.phase === 'quiz_question') {
+      if (room.players.every((p) => p.answered)) {
+        finalizeQuizRound(room.code);
+        return;
+      }
+    }
+
+    if (room.game.type === GAME_TYPES.DRAW && room.game.phase === 'draw_play') {
+      if (room.game.drawerId === socket.id) {
+        finalizeDrawRound(room.code, true);
+        return;
+      }
+      const others = room.players.filter((p) => p.id !== room.game.drawerId);
+      if (others.length && others.every((p) => room.game.guessed.has(p.id))) {
+        finalizeDrawRound(room.code, false);
+        return;
+      }
     }
   }
 
@@ -492,12 +378,272 @@ function leavePartyRoom(socket, silent = false) {
   emitLobby();
 }
 
-function sendPartyError(socket, message) {
+function sendError(socket, message) {
   socket.emit('partyError', { message });
 }
 
+function makeQuizQuestion() {
+  const prompt = pickRandom(QUIZ_PROMPTS);
+  const options = shuffle([prompt.correct, ...prompt.wrongs.slice(0, 3)]);
+  return {
+    question: prompt.question,
+    options,
+    answer: options.indexOf(prompt.correct),
+    baseScore: 100,
+  };
+}
+
+function buildQuizQuestions(count) {
+  const n = Math.max(1, count);
+  const out = [];
+  for (let i = 0; i < n; i += 1) {
+    out.push(makeQuizQuestion());
+  }
+  return out;
+}
+
+function startQuizRound(room, roundIndex) {
+  const g = room.game;
+  g.roundIndex = roundIndex;
+  g.phase = 'quiz_question';
+  g.roundEndsAt = Date.now() + g.seconds * 1000;
+  g.answers = new Map();
+
+  room.players.forEach((p) => {
+    p.answered = false;
+    p.answerChoice = null;
+    p.lastGain = 0;
+    p.roundScore = 0;
+  });
+
+  emitRoom(room);
+
+  clearRoomTimer(room);
+  room.timer = setTimeout(() => finalizeQuizRound(room.code), g.seconds * 1000 + 30);
+}
+
+function finalizeQuizRound(code) {
+  const room = rooms.get(code);
+  if (!room || room.stage !== 'playing' || !room.game || room.game.type !== GAME_TYPES.QUIZ) return;
+  const g = room.game;
+  if (g.phase !== 'quiz_question') return;
+
+  clearRoomTimer(room);
+  g.phase = 'quiz_reveal';
+
+  const q = g.questions[g.roundIndex];
+  room.players.forEach((p) => {
+    const sub = g.answers.get(p.id);
+    p.answered = Boolean(sub);
+    p.answerChoice = sub ? sub.choice : null;
+
+    if (!sub) {
+      p.lastGain = 0;
+      return;
+    }
+
+    if (sub.choice === q.answer) {
+      const leftMs = Math.max(0, g.roundEndsAt - sub.at);
+      const speedBonus = Math.min(120, Math.floor(leftMs / 100));
+      const gain = q.baseScore + speedBonus;
+      p.score += gain;
+      p.correct += 1;
+      p.lastGain = gain;
+      p.roundScore = gain;
+    } else {
+      p.wrong += 1;
+      p.lastGain = 0;
+      p.roundScore = 0;
+    }
+  });
+
+  emitRoom(room);
+
+  room.timer = setTimeout(() => {
+    if (!rooms.has(code)) return;
+    if (g.roundIndex + 1 >= g.totalRounds) {
+      finishGame(room);
+      return;
+    }
+    startQuizRound(room, g.roundIndex + 1);
+  }, 2300);
+}
+
+function startMemoryRound(room, roundIndex) {
+  const g = room.game;
+  g.roundIndex = roundIndex;
+  g.phase = 'memory_play';
+  g.roundEndsAt = Date.now() + g.seconds * 1000;
+
+  room.players.forEach((p) => {
+    p.roundScore = 0;
+    p.lastGain = 0;
+    p.answered = false;
+    p.answerChoice = null;
+  });
+
+  emitRoom(room);
+
+  clearRoomTimer(room);
+  room.timer = setTimeout(() => finalizeMemoryRound(room.code), g.seconds * 1000 + 30);
+}
+
+function finalizeMemoryRound(code) {
+  const room = rooms.get(code);
+  if (!room || room.stage !== 'playing' || !room.game || room.game.type !== GAME_TYPES.MEMORY) return;
+  const g = room.game;
+  if (g.phase !== 'memory_play') return;
+
+  clearRoomTimer(room);
+  g.phase = 'memory_reveal';
+  room.players.forEach((p) => {
+    const gain = Math.max(0, p.roundScore || 0);
+    p.score += gain;
+    p.lastGain = gain;
+  });
+
+  emitRoom(room);
+
+  room.timer = setTimeout(() => {
+    if (!rooms.has(code)) return;
+    if (g.roundIndex + 1 >= g.totalRounds) {
+      finishGame(room);
+      return;
+    }
+    startMemoryRound(room, g.roundIndex + 1);
+  }, 1800);
+}
+
+function normalizeGuess(text) {
+  return String(text || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '');
+}
+
+function startDrawRound(room, roundIndex) {
+  const g = room.game;
+  g.roundIndex = roundIndex;
+  g.phase = 'draw_play';
+  g.roundEndsAt = Date.now() + g.seconds * 1000;
+  g.drawerId = g.order[roundIndex % g.order.length];
+  g.word = pickRandom(DRAW_WORDS);
+  g.guessed = new Set();
+  g.guesses = [];
+  g.drawerGain = 0;
+
+  room.players.forEach((p) => {
+    p.answered = false;
+    p.answerChoice = null;
+    p.lastGain = 0;
+    p.roundScore = 0;
+  });
+
+  emitRoom(room);
+  io.to(g.drawerId).emit('partyDrawWord', {
+    word: g.word,
+    roundNo: g.roundIndex + 1,
+    totalRounds: g.totalRounds,
+  });
+
+  clearRoomTimer(room);
+  room.timer = setTimeout(() => finalizeDrawRound(room.code, false), g.seconds * 1000 + 30);
+}
+
+function finalizeDrawRound(code, forceByDrawerLeave) {
+  const room = rooms.get(code);
+  if (!room || room.stage !== 'playing' || !room.game || room.game.type !== GAME_TYPES.DRAW) return;
+  const g = room.game;
+  if (g.phase !== 'draw_play') return;
+
+  clearRoomTimer(room);
+  g.phase = 'draw_reveal';
+
+  if (forceByDrawerLeave) {
+    g.guesses.push({
+      name: '系统',
+      text: '画手离开，本轮提前结束',
+      ok: false,
+      at: Date.now(),
+    });
+  }
+
+  emitRoom(room);
+
+  room.timer = setTimeout(() => {
+    if (!rooms.has(code)) return;
+    if (g.roundIndex + 1 >= g.totalRounds) {
+      finishGame(room);
+      return;
+    }
+    startDrawRound(room, g.roundIndex + 1);
+  }, 2600);
+}
+
+function finishGame(room) {
+  clearRoomTimer(room);
+  room.stage = 'result';
+  emitRoom(room);
+  emitLobby();
+}
+
+function startGame(room) {
+  resetPlayersForNewGame(room);
+  const setup = room.setup;
+
+  if (setup.selectedGame === GAME_TYPES.QUIZ) {
+    room.game = {
+      type: GAME_TYPES.QUIZ,
+      totalRounds: setup.rounds,
+      seconds: setup.seconds,
+      roundIndex: 0,
+      phase: 'quiz_question',
+      roundEndsAt: null,
+      questions: buildQuizQuestions(setup.rounds),
+      answers: new Map(),
+    };
+    room.stage = 'playing';
+    emitLobby();
+    startQuizRound(room, 0);
+    return;
+  }
+
+  if (setup.selectedGame === GAME_TYPES.MEMORY) {
+    room.game = {
+      type: GAME_TYPES.MEMORY,
+      totalRounds: setup.rounds,
+      seconds: setup.seconds,
+      roundIndex: 0,
+      phase: 'memory_play',
+      roundEndsAt: null,
+    };
+    room.stage = 'playing';
+    emitLobby();
+    startMemoryRound(room, 0);
+    return;
+  }
+
+  room.game = {
+    type: GAME_TYPES.DRAW,
+    totalRounds: setup.rounds,
+    seconds: setup.seconds,
+    roundIndex: 0,
+    phase: 'draw_play',
+    roundEndsAt: null,
+    order: shuffle(room.players.map((p) => p.id)),
+    drawerId: null,
+    word: '',
+    guessed: new Set(),
+    guesses: [],
+    drawerGain: 0,
+  };
+  room.stage = 'playing';
+  emitLobby();
+  startDrawRound(room, 0);
+}
+
 io.on('connection', (socket) => {
-  socket.data.partyRoomCode = null;
+  socket.data.roomCode = null;
 
   socket.emit('partyLobby', buildLobbyPayload());
 
@@ -508,81 +654,78 @@ io.on('connection', (socket) => {
   socket.on('partyCreateRoom', (payload = {}) => {
     const name = sanitizeName(payload.name);
     if (!name) {
-      sendPartyError(socket, '请输入昵称');
+      sendError(socket, '请输入昵称');
       return;
     }
 
-    leavePartyRoom(socket, true);
+    leaveRoom(socket, true);
 
     const code = allocateRoomCode();
-    const title = sanitizeRoomTitle(payload.title) || `除夕局-${code}`;
-    const totalRounds = clampInt(payload.totalRounds, 3, 12, DEFAULT_ROUNDS);
-    const roundSeconds = clampInt(payload.roundSeconds, 8, 25, DEFAULT_SECONDS);
-    const mode = sanitizeMode(payload.mode);
+    const title = sanitizeRoomTitle(payload.title) || `派对局-${code}`;
 
-    const hostPlayer = {
+    const host = {
       id: socket.id,
       name,
       score: 0,
       correct: 0,
       wrong: 0,
+      lastGain: 0,
       answered: false,
       answerChoice: null,
-      lastGain: 0,
+      roundScore: 0,
     };
 
     const room = {
       code,
       title,
-      mode,
       hostId: socket.id,
-      phase: 'lobby',
-      createdAt: Date.now(),
-      players: [hostPlayer],
-      totalRounds,
-      roundSeconds,
-      questions: [],
-      roundIndex: -1,
-      roundAnswers: new Map(),
-      currentQuestion: null,
-      roundEndsAt: null,
+      stage: 'lobby',
+      setup: normalizeSetup(payload.setup || {}, DEFAULT_SETUP),
+      players: [host],
+      game: null,
       timer: null,
+      createdAt: Date.now(),
     };
 
-    partyRooms.set(code, room);
+    rooms.set(code, room);
     socket.join(roomChannel(code));
-    socket.data.partyRoomCode = code;
+    socket.data.roomCode = code;
 
     emitRoom(room);
     emitLobby();
   });
 
   socket.on('partyJoinRoom', (payload = {}) => {
+    const code = String(payload.code || '').trim().toUpperCase();
     const name = sanitizeName(payload.name);
-    const code = String(payload.code || '').toUpperCase().trim();
 
     if (!name) {
-      sendPartyError(socket, '请输入昵称');
+      sendError(socket, '请输入昵称');
       return;
     }
 
-    const room = partyRooms.get(code);
+    if (!/^[A-Z0-9]{6}$/.test(code)) {
+      sendError(socket, '房间码应为 6 位字母数字');
+      return;
+    }
+
+    const room = rooms.get(code);
     if (!room) {
-      sendPartyError(socket, '房间不存在');
+      sendError(socket, '房间不存在');
       return;
     }
 
-    if (room.phase !== 'lobby') {
-      sendPartyError(socket, '该房间已开始，暂不支持中途加入');
+    if (room.stage === 'playing') {
+      sendError(socket, '游戏进行中，暂不支持中途加入');
       return;
     }
 
     if (room.players.length >= MAX_PLAYERS) {
-      sendPartyError(socket, '房间人数已满');
+      sendError(socket, '房间人数已满');
       return;
     }
 
-    leavePartyRoom(socket, true);
+    leaveRoom(socket, true);
 
     const player = {
       id: socket.id,
@@ -590,99 +733,233 @@ io.on('connection', (socket) => {
       score: 0,
       correct: 0,
       wrong: 0,
+      lastGain: 0,
       answered: false,
       answerChoice: null,
-      lastGain: 0,
+      roundScore: 0,
     };
 
     room.players.push(player);
     socket.join(roomChannel(code));
-    socket.data.partyRoomCode = code;
+    socket.data.roomCode = code;
 
     emitRoom(room);
     emitLobby();
   });
 
   socket.on('partyLeaveRoom', () => {
-    leavePartyRoom(socket);
+    leaveRoom(socket);
   });
 
-  socket.on('partyStart', () => {
-    const room = partyRoomOfSocket(socket);
+  socket.on('partyUpdateSetup', (payload = {}) => {
+    const room = findRoomOfSocket(socket);
     if (!room) return;
 
     if (room.hostId !== socket.id) {
-      sendPartyError(socket, '只有房主可以开始');
+      sendError(socket, '只有房主可以修改配置');
       return;
     }
 
-    if (room.phase !== 'lobby' && room.phase !== 'finished') {
-      sendPartyError(socket, '当前回合未结束');
+    if (room.stage === 'playing') {
+      sendError(socket, '游戏进行中，不能改配置');
+      return;
+    }
+
+    room.setup = normalizeSetup(payload, room.setup);
+    emitRoom(room);
+    emitLobby();
+  });
+
+  socket.on('partyStart', () => {
+    const room = findRoomOfSocket(socket);
+    if (!room) return;
+
+    if (room.hostId !== socket.id) {
+      sendError(socket, '只有房主可以开始');
       return;
     }
 
     if (room.players.length < 2) {
-      sendPartyError(socket, '至少 2 人才能开始');
+      sendError(socket, '至少 2 人才能开始');
       return;
     }
 
-    startMatch(room);
+    if (room.stage === 'playing') {
+      sendError(socket, '游戏已在进行中');
+      return;
+    }
+
+    startGame(room);
   });
 
-  socket.on('partyResetLobby', () => {
-    const room = partyRoomOfSocket(socket);
+  socket.on('partyBackLobby', () => {
+    const room = findRoomOfSocket(socket);
     if (!room) return;
 
     if (room.hostId !== socket.id) {
-      sendPartyError(socket, '只有房主可以重置');
+      sendError(socket, '只有房主可以执行此操作');
+      return;
+    }
+
+    if (room.stage === 'playing') {
+      sendError(socket, '请等待当前局结束');
       return;
     }
 
     clearRoomTimer(room);
-    room.phase = 'lobby';
-    room.roundIndex = -1;
-    room.roundEndsAt = null;
-    room.currentQuestion = null;
-    room.questions = [];
-    room.roundAnswers = new Map();
-    resetPlayersForNewMatch(room);
-
+    room.stage = 'lobby';
+    room.game = null;
+    resetPlayersForNewGame(room);
     emitRoom(room);
     emitLobby();
   });
 
   socket.on('partyAnswer', (payload = {}) => {
-    const room = partyRoomOfSocket(socket);
-    if (!room || room.phase !== 'question') return;
+    const room = findRoomOfSocket(socket);
+    if (!room || room.stage !== 'playing' || !room.game || room.game.type !== GAME_TYPES.QUIZ) return;
+    if (room.game.phase !== 'quiz_question') return;
 
     const player = room.players.find((p) => p.id === socket.id);
     if (!player || player.answered) return;
 
     const choice = clampInt(payload.choice, 0, 3, -1);
     if (choice < 0 || choice > 3) {
-      sendPartyError(socket, '答案无效');
+      sendError(socket, '答案无效');
       return;
     }
 
     player.answered = true;
     player.answerChoice = choice;
-    room.roundAnswers.set(player.id, {
-      choice,
-      at: Date.now(),
-    });
+    room.game.answers.set(player.id, { choice, at: Date.now() });
 
     emitRoom(room);
 
     if (room.players.every((p) => p.answered)) {
-      finalizeRound(room.code);
+      finalizeQuizRound(room.code);
     }
   });
 
+  socket.on('partyMemoryUpdate', (payload = {}) => {
+    const room = findRoomOfSocket(socket);
+    if (!room || room.stage !== 'playing' || !room.game || room.game.type !== GAME_TYPES.MEMORY) return;
+    if (room.game.phase !== 'memory_play') return;
+
+    const player = room.players.find((p) => p.id === socket.id);
+    if (!player) return;
+
+    const score = clampInt(payload.score, 0, 9999, 0);
+    if (score < player.roundScore) return;
+
+    player.roundScore = score;
+    emitRoom(room);
+  });
+
+  socket.on('partyDrawStroke', (payload = {}) => {
+    const room = findRoomOfSocket(socket);
+    if (!room || room.stage !== 'playing' || !room.game || room.game.type !== GAME_TYPES.DRAW) return;
+    if (room.game.phase !== 'draw_play') return;
+    if (room.game.drawerId !== socket.id) return;
+
+    const x0 = Number(payload.x0);
+    const y0 = Number(payload.y0);
+    const x1 = Number(payload.x1);
+    const y1 = Number(payload.y1);
+    const size = clampInt(payload.size, 1, 24, 4);
+    const color = String(payload.color || '#2c0505').slice(0, 20);
+
+    if (![x0, y0, x1, y1].every(Number.isFinite)) return;
+
+    socket.to(roomChannel(room.code)).emit('partyDrawStroke', {
+      x0: Math.max(0, Math.min(1, x0)),
+      y0: Math.max(0, Math.min(1, y0)),
+      x1: Math.max(0, Math.min(1, x1)),
+      y1: Math.max(0, Math.min(1, y1)),
+      size,
+      color,
+    });
+  });
+
+  socket.on('partyDrawClear', () => {
+    const room = findRoomOfSocket(socket);
+    if (!room || room.stage !== 'playing' || !room.game || room.game.type !== GAME_TYPES.DRAW) return;
+    if (room.game.phase !== 'draw_play') return;
+    if (room.game.drawerId !== socket.id) return;
+
+    socket.to(roomChannel(room.code)).emit('partyDrawClear');
+  });
+
+  socket.on('partyDrawGuess', (payload = {}) => {
+    const room = findRoomOfSocket(socket);
+    if (!room || room.stage !== 'playing' || !room.game || room.game.type !== GAME_TYPES.DRAW) return;
+    const g = room.game;
+    if (g.phase !== 'draw_play') return;
+
+    if (socket.id === g.drawerId) {
+      sendError(socket, '画手不能猜词');
+      return;
+    }
+
+    const player = room.players.find((p) => p.id === socket.id);
+    if (!player) return;
+
+    const text = String(payload.text || '').trim().slice(0, 24);
+    if (!text) return;
+
+    if (g.guessed.has(player.id)) return;
+
+    const ok = normalizeGuess(text) === normalizeGuess(g.word);
+
+    if (ok) {
+      g.guessed.add(player.id);
+      player.answered = true;
+
+      const leftMs = Math.max(0, g.roundEndsAt - Date.now());
+      const speedBonus = Math.min(120, Math.floor(leftMs / 100));
+      const gain = 120 + speedBonus;
+
+      player.score += gain;
+      player.correct += 1;
+      player.lastGain = gain;
+
+      const drawer = room.players.find((p) => p.id === g.drawerId);
+      if (drawer) {
+        g.drawerGain += 60;
+        drawer.score += 60;
+        drawer.lastGain = g.drawerGain;
+      }
+
+      g.guesses.push({
+        name: player.name,
+        text,
+        ok: true,
+        at: Date.now(),
+      });
+
+      emitRoom(room);
+
+      const others = room.players.filter((p) => p.id !== g.drawerId);
+      if (others.length && others.every((p) => g.guessed.has(p.id))) {
+        finalizeDrawRound(room.code, false);
+      }
+      return;
+    }
+
+    player.wrong += 1;
+    g.guesses.push({
+      name: player.name,
+      text,
+      ok: false,
+      at: Date.now(),
+    });
+
+    emitRoom(room);
+  });
+
   socket.on('disconnect', () => {
-    leavePartyRoom(socket, true);
+    leaveRoom(socket, true);
   });
 });
 
 server.listen(PORT, () => {
-  console.log(`Party quiz server running at http://localhost:${PORT}`);
+  console.log(`Party game server running at http://localhost:${PORT}`);
 });
