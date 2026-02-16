@@ -359,11 +359,13 @@ function setActionPanelCollapsed(next, persist = true) {
 
 function applySideLayout() {
   if (!el.tableGrid || !el.sidePanel) return;
+  const tableActive = !el.tableView.classList.contains('hidden');
   const drawerMode = useSideDrawerMode();
-  const drawerOpen = drawerMode && !uiSideCollapsed;
-  el.tableGrid.classList.toggle('side-collapsed', uiSideCollapsed || drawerMode);
+  const drawerOpen = tableActive && drawerMode && !uiSideCollapsed;
+  const sideCollapsed = !tableActive || uiSideCollapsed || drawerMode;
+  el.tableGrid.classList.toggle('side-collapsed', sideCollapsed);
   el.tableGrid.classList.toggle('side-drawer-open', drawerOpen);
-  el.sidePanel.classList.toggle('hidden', uiSideCollapsed);
+  el.sidePanel.classList.toggle('hidden', !tableActive || uiSideCollapsed);
   if (el.sideDrawerBackdrop) {
     el.sideDrawerBackdrop.classList.toggle('hidden', !drawerOpen);
   }
@@ -1106,15 +1108,16 @@ function renderStats() {
     .map((p) => ({
       id: p.id,
       name: p.name,
+      seat: p.seat,
       stack: p.stack,
       net: p.stack - base,
     }))
-    .sort((a, b) => b.net - a.net);
+    .sort((a, b) => b.stack - a.stack);
   const maxAbs = Math.max(1, ...rows.map((r) => Math.abs(r.net)));
 
   const summary = document.createElement('div');
   summary.className = 'stats-summary';
-  summary.textContent = `已完成 ${roomState?.handHistory?.length || 0} 手`;
+  summary.textContent = `在座 ${players.length} 人 · 已完成 ${roomState?.handHistory?.length || 0} 手`;
   el.statsList.appendChild(summary);
 
   rows.forEach((r) => {
@@ -1124,7 +1127,7 @@ function renderStats() {
     const top = document.createElement('div');
     top.className = 'stat-top';
     const name = document.createElement('span');
-    name.textContent = r.name;
+    name.textContent = `${r.name} · 座位${r.seat}`;
     const net = document.createElement('span');
     net.className = r.net > 0 ? 'pos' : r.net < 0 ? 'neg' : 'zero';
     net.textContent = `${r.net > 0 ? '+' : ''}${r.net}`;
@@ -1140,7 +1143,7 @@ function renderStats() {
 
     const sub = document.createElement('div');
     sub.className = 'stat-sub';
-    sub.textContent = `后手 ${r.stack}`;
+    sub.textContent = `当前筹码 ${r.stack}`;
 
     row.appendChild(top);
     row.appendChild(bar);
@@ -1845,6 +1848,7 @@ socket.on('joinedRoom', ({ playerId }) => {
   closeLobbyPanels();
   el.lobbyView.classList.add('hidden');
   el.tableView.classList.remove('hidden');
+  applySideLayout();
   showNotice(el.notice, '');
   socket.emit('getHandHistory');
 });
@@ -1878,6 +1882,7 @@ socket.on('kicked', (payload) => {
   replayState = null;
   el.tableView.classList.add('hidden');
   el.lobbyView.classList.remove('hidden');
+  applySideLayout();
   socket.emit('listRooms');
 });
 
@@ -2051,6 +2056,7 @@ el.leaveBtn.addEventListener('click', () => {
   closeLobbyPanels();
   el.tableView.classList.add('hidden');
   el.lobbyView.classList.remove('hidden');
+  applySideLayout();
   socket.emit('listRooms');
 });
 
