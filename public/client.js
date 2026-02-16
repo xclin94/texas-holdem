@@ -340,7 +340,8 @@ function refreshSideButton() {
 }
 
 function refreshSideTabs() {
-  const validTabs = new Set(['chips', 'chart', 'history', 'chat', 'config', 'admin']);
+  if (uiSideTab === 'config' || uiSideTab === 'admin') uiSideTab = 'room';
+  const validTabs = new Set(['chips', 'chart', 'history', 'chat', 'room']);
   if (!validTabs.has(uiSideTab)) uiSideTab = 'chips';
   sideTabButtons.forEach((btn) => {
     const active = btn.dataset.sideTab === uiSideTab;
@@ -2144,7 +2145,7 @@ el.skipStraddleBtn.addEventListener('click', () => {
 
 el.saveConfigBtn.addEventListener('click', () => {
   showNotice(el.tableNotice, '房间配置在创建后锁定，只支持查看', 'error');
-  setSideTab('config', true);
+  setSideTab('room', true);
 });
 
 el.sendChatBtn.addEventListener('click', () => {
