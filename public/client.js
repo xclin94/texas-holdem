@@ -12,12 +12,14 @@ let createPendingTimer = null;
 let actionPending = false;
 let actionPendingTimer = null;
 let uiSeatDensity = localStorage.getItem('holdem_seat_density') || 'auto';
+let uiTheme = localStorage.getItem('holdem_theme') || 'forest';
 let bannerTimer = null;
 let trackedHandNo = null;
 let trackedPhase = null;
 let trackedResultHandNo = null;
 let trackedCommunityHandNo = null;
 let trackedCommunityCount = 0;
+let trackedSeatDealHandNo = null;
 
 const REQUEST_TIMEOUT_MS = 7000;
 const ACTION_PENDING_MS = 1200;
@@ -65,6 +67,7 @@ const el = {
   sessionTimer: $('sessionTimer'),
   copyRoomBtn: $('copyRoomBtn'),
 
+  themeToggleBtn: $('themeToggleBtn'),
   densityToggleBtn: $('densityToggleBtn'),
   focusMeBtn: $('focusMeBtn'),
   takeSeatBtn: $('takeSeatBtn'),
@@ -134,6 +137,12 @@ const el = {
 };
 
 const quickRaiseButtons = Array.from(document.querySelectorAll('.quick-raise-btn'));
+const THEME_CYCLE = ['forest', 'ocean', 'sunset'];
+const THEME_LABEL = {
+  forest: '森林',
+  ocean: '海洋',
+  sunset: '日落',
+};
 const quickRaiseLabelMap = {
   '0.33': '1/3池',
   '0.5': '1/2池',
@@ -158,6 +167,10 @@ function showNotice(target, msg, tone = 'info') {
 function showHandBanner(message, tone = 'info', duration = 1600) {
   if (!el.handBanner) return;
   if (!message) {
+    if (bannerTimer) {
+      clearTimeout(bannerTimer);
+      bannerTimer = null;
+    }
     el.handBanner.classList.add('hidden');
     el.handBanner.classList.remove('error', 'ok');
     el.handBanner.textContent = '';
@@ -177,6 +190,16 @@ function showHandBanner(message, tone = 'info', duration = 1600) {
 function refreshDensityButton() {
   if (!el.densityToggleBtn) return;
   el.densityToggleBtn.textContent = uiSeatDensity === 'compact' ? '标准视图' : '紧凑视图';
+}
+
+function applyTheme() {
+  if (!THEME_CYCLE.includes(uiTheme)) uiTheme = 'forest';
+  document.body.dataset.theme = uiTheme;
+}
+
+function refreshThemeButton() {
+  if (!el.themeToggleBtn) return;
+  el.themeToggleBtn.textContent = `主题：${THEME_LABEL[uiTheme] || '森林'}`;
 }
 
 function setActionPending(v) {
@@ -591,10 +614,12 @@ function renderSeatMap() {
   el.seatMap.innerHTML = '';
   const players = roomState?.players || [];
   const maxPlayers = roomState?.settings?.maxPlayers || 9;
+  const handNo = roomState?.game?.handNo || null;
   const compact = isMobileView();
   const layout = getSeatLayout(maxPlayers, compact);
   const posMap = buildPositionLabelMap();
   const preset = seatNodePreset(maxPlayers, compact);
+  const shouldAnimateSeatDeal = Boolean(handNo && handNo !== trackedSeatDealHandNo);
 
   if (el.tableCanvas) {
     const minHeight = compact
@@ -654,7 +679,13 @@ function renderSeatMap() {
     const cards = document.createElement('div');
     cards.className = 'seat-cards';
     if (p.holeCards?.length) {
-      p.holeCards.forEach((c) => cards.appendChild(cardNode(c)));
+      p.holeCards.forEach((c, idx) => {
+        const card = cardNode(c, false, shouldAnimateSeatDeal ? 'deal-seat' : '');
+        if (shouldAnimateSeatDeal) {
+          card.style.animationDelay = `${(seat - 1) * 45 + idx * 60}ms`;
+        }
+        cards.appendChild(card);
+      });
     } else if (p.inHand && !roomState.game?.finished) {
       cards.appendChild(cardNode('XX', true));
       cards.appendChild(cardNode('XX', true));
@@ -672,6 +703,10 @@ function renderSeatMap() {
     if (admin) node.appendChild(admin);
 
     el.seatMap.appendChild(node);
+  }
+
+  if (shouldAnimateSeatDeal) {
+    trackedSeatDealHandNo = handNo;
   }
 }
 
@@ -944,6 +979,7 @@ function renderStatus() {
     trackedHandNo = null;
     trackedPhase = null;
     trackedResultHandNo = null;
+    trackedSeatDealHandNo = null;
   } else {
     if (trackedHandNo !== g.handNo) {
       trackedHandNo = g.handNo;
@@ -1041,9 +1077,70 @@ function renderStatus() {
   }
 }
 
+function myDisplayName() {
+  return roomPlayerById(meId)?.name || roomState?.spectators?.find((s) => s.id === meId)?.name || '';
+}
+
+function parseLogLine(rawLine) {
+  const line = String(rawLine || '');
+  const tm = line.match(/^(\d{1,2}:\d{2}:\d{2})\s(.+)$/);
+  const timeText = tm ? tm[1] : '';
+  const body = tm ? tm[2] : line;
+  const chat = body.match(/^([^:：]{1,24}?)(\(观战\))?[:：]\s(.+)$/);
+  if (!chat) {
+    return {
+      kind: 'system',
+      timeText,
+      text: body,
+    };
+  }
+  return {
+    kind: 'chat',
+    timeText,
+    sender: chat[1].trim(),
+    spectatorTag: chat[2] ? '(观战)' : '',
+    message: chat[3],
+  };
+}
+
 function renderLogs() {
-  el.logs.textContent = (roomState?.logs || []).join('\n');
-  el.logs.scrollTop = el.logs.scrollHeight;
+  const lines = roomState?.logs || [];
+  const me = myDisplayName();
+  const nearBottom = el.logs.scrollHeight - el.logs.scrollTop - el.logs.clientHeight < 28;
+  el.logs.innerHTML = '';
+
+  lines.forEach((line) => {
+    const parsed = parseLogLine(line);
+    const item = document.createElement('div');
+    item.className = `log-item ${parsed.kind}`;
+
+    if (parsed.kind === 'chat') {
+      const mine = parsed.sender === me;
+      if (mine) item.classList.add('mine');
+
+      const meta = document.createElement('div');
+      meta.className = 'log-meta';
+      meta.textContent = `${parsed.sender}${parsed.spectatorTag || ''}${parsed.timeText ? ` · ${parsed.timeText}` : ''}`;
+
+      const bubble = document.createElement('div');
+      bubble.className = 'log-bubble';
+      bubble.textContent = parsed.message || '';
+
+      item.appendChild(meta);
+      item.appendChild(bubble);
+    } else {
+      const sys = document.createElement('div');
+      sys.className = 'log-system';
+      sys.textContent = `${parsed.timeText ? `${parsed.timeText} ` : ''}${parsed.text || ''}`;
+      item.appendChild(sys);
+    }
+
+    el.logs.appendChild(item);
+  });
+
+  if (nearBottom) {
+    el.logs.scrollTop = el.logs.scrollHeight;
+  }
 }
 
 function renderRoom() {
@@ -1146,6 +1243,7 @@ socket.on('joinedRoom', ({ playerId }) => {
   trackedResultHandNo = null;
   trackedCommunityHandNo = null;
   trackedCommunityCount = 0;
+  trackedSeatDealHandNo = null;
   meId = playerId;
   replayState = null;
   closeLobbyPanels();
@@ -1176,6 +1274,7 @@ socket.on('kicked', (payload) => {
   clearAllPending();
   setActionPending(false);
   showHandBanner('');
+  trackedSeatDealHandNo = null;
   showNotice(el.notice, payload?.reason || '你已被移出房间', 'error');
   roomState = null;
   replayState = null;
@@ -1256,6 +1355,14 @@ el.refreshLobbyBtn.addEventListener('click', () => {
   socket.emit('listRooms');
 });
 
+el.themeToggleBtn.addEventListener('click', () => {
+  const idx = THEME_CYCLE.indexOf(uiTheme);
+  uiTheme = THEME_CYCLE[(idx + 1 + THEME_CYCLE.length) % THEME_CYCLE.length];
+  localStorage.setItem('holdem_theme', uiTheme);
+  applyTheme();
+  refreshThemeButton();
+});
+
 el.densityToggleBtn.addEventListener('click', () => {
   uiSeatDensity = uiSeatDensity === 'compact' ? 'auto' : 'compact';
   localStorage.setItem('holdem_seat_density', uiSeatDensity);
@@ -1281,6 +1388,7 @@ el.leaveBtn.addEventListener('click', () => {
   clearAllPending();
   setActionPending(false);
   showHandBanner('');
+  trackedSeatDealHandNo = null;
   socket.emit('leaveRoom');
   roomState = null;
   replayState = null;
@@ -1382,7 +1490,9 @@ window.addEventListener('resize', () => {
 });
 
 loadName();
+applyTheme();
 refreshPendingButtons();
+refreshThemeButton();
 refreshDensityButton();
 (() => {
   const params = new URLSearchParams(window.location.search);
