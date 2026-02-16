@@ -718,6 +718,22 @@ input[type='checkbox'] {
   animation: seatSpotlight 1s ease;
 }
 
+.seat-map.seat-pick-mode .seat-node.seat-selectable {
+  cursor: pointer;
+  border-color: rgba(232, 187, 97, 0.78);
+  box-shadow: 0 0 0 2px rgba(232, 187, 97, 0.2);
+}
+
+.seat-map.seat-pick-mode .seat-node.seat-selectable:hover {
+  border-color: rgba(255, 226, 150, 0.95);
+  box-shadow: 0 0 0 3px rgba(232, 187, 97, 0.26);
+}
+
+.seat-map.seat-pick-mode .seat-node.empty.seat-selectable {
+  background: rgba(38, 70, 53, 0.56);
+  color: #ffe8b4;
+}
+
 .seat-head {
   font-weight: 700;
   font-size: 13px;

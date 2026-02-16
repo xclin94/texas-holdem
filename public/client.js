@@ -36,6 +36,7 @@ let preActionMode = null;
 let preActionToken = null;
 let actionCueTimer = null;
 let serverClockOffsetMs = 0;
+let seatPickMode = false;
 let audioCtx = null;
 let swipeStart = null;
 
@@ -731,6 +732,30 @@ function roomPlayerById(id) {
   return roomState?.players?.find((p) => p.id === id) || null;
 }
 
+function canSelfChangeSeat() {
+  if (roomState?.myRole !== 'player') return false;
+  const me = roomPlayerById(meId);
+  if (!me) return false;
+  const inActiveHand = Boolean(roomState?.game && !roomState.game.finished && me.inHand && !me.folded);
+  return !inActiveHand;
+}
+
+function setSeatPickMode(next, announce = true) {
+  const canChange = canSelfChangeSeat();
+  seatPickMode = Boolean(next) && canChange;
+  if (announce) {
+    if (seatPickMode) {
+      showHandBanner('换座模式：点击任意目标座位', 'ok', 1200);
+    } else {
+      showHandBanner('已退出换座模式', 'info', 700);
+    }
+  }
+  if (roomState) {
+    renderStatus();
+    renderSeatMap();
+  }
+}
+
 function roomMemberName(id) {
   return roomPlayerById(id)?.name || roomState?.spectators?.find((s) => s.id === id)?.name || '-';
 }
@@ -820,9 +845,9 @@ function collectCreateSettings() {
       startingStack: parseNum(el.createStackInput.value, 2000),
       smallBlind: parseNum(el.createSbInput.value, 10),
       bigBlind: parseNum(el.createBbInput.value, 20),
-      maxPlayers: parseNum(el.createMaxPlayersInput.value, 9),
+      maxPlayers: parseNum(el.createMaxPlayersInput.value, 6),
       turnTimeSec: parseNum(el.createTurnInput.value, 25),
-      sessionMinutes: parseNum(el.createSessionInput.value, 180),
+      sessionMinutes: parseNum(el.createSessionInput.value, 30),
       blindIntervalMinutes: parseNum(el.createBlindIntervalInput.value, 15),
       tournamentMode: el.createTournamentInput.checked,
       allowStraddle: el.createStraddleInput.checked,
@@ -839,9 +864,9 @@ function collectConfigSettings() {
       startingStack: parseNum(el.cfgStackInput.value, 2000),
       smallBlind: parseNum(el.cfgSbInput.value, 10),
       bigBlind: parseNum(el.cfgBbInput.value, 20),
-      maxPlayers: parseNum(el.cfgMaxPlayersInput.value, 9),
+      maxPlayers: parseNum(el.cfgMaxPlayersInput.value, 6),
       turnTimeSec: parseNum(el.cfgTurnInput.value, 25),
-      sessionMinutes: parseNum(el.cfgSessionInput.value, 180),
+      sessionMinutes: parseNum(el.cfgSessionInput.value, 30),
       blindIntervalMinutes: parseNum(el.cfgBlindIntervalInput.value, 15),
       tournamentMode: el.cfgTournamentInput.checked,
       allowStraddle: el.cfgStraddleInput.checked,
@@ -1094,6 +1119,13 @@ function renderSeatMap() {
   const players = roomState?.players || [];
   const maxPlayers = roomState?.settings?.maxPlayers || 9;
   const handNo = roomState?.game?.handNo || null;
+  const me = roomPlayerById(meId);
+  const mySeat = me?.seat || null;
+  const canChangeSeatNow = canSelfChangeSeat();
+  if (!canChangeSeatNow) {
+    seatPickMode = false;
+  }
+  el.seatMap.classList.toggle('seat-pick-mode', seatPickMode && canChangeSeatNow);
   const compact = isMobileView();
   const narrowMobile = compact && isNarrowMobileView();
   const layout = getSeatLayout(maxPlayers, compact);
@@ -1115,12 +1147,14 @@ function renderSeatMap() {
   }
 
   for (let seat = 1; seat <= maxPlayers; seat += 1) {
-    const point = layout[seat - 1] || [50, 50];
+    const pointIndex = mySeat ? (seat - mySeat + maxPlayers) % maxPlayers : seat - 1;
+    const point = layout[pointIndex] || [50, 50];
     const p = players.find((x) => x.seat === seat);
     const isTurn = Boolean(p && roomState?.game?.turnId === p.id && !roomState?.game?.finished);
 
     const node = document.createElement('div');
     node.className = `seat-node${p ? '' : ' empty'}${p?.id === meId ? ' me' : ''}${isTurn ? ' turn' : ''}${preset.compact ? ' compact' : ''}${preset.dense ? ' dense' : ''}`;
+    node.dataset.seat = String(seat);
     const emptyMinWidth = narrowMobile ? 56 : 68;
     const emptyMinHeight = narrowMobile ? 30 : 34;
     node.style.left = `${point[0]}%`;
@@ -1128,6 +1162,23 @@ function renderSeatMap() {
     node.style.width = `${p ? preset.width : Math.max(emptyMinWidth, Math.floor(preset.width * 0.66))}px`;
     node.style.minHeight = `${p ? preset.height : Math.max(emptyMinHeight, Math.floor(preset.height * 0.5))}px`;
     node.style.zIndex = String((p?.id === meId ? 40 : 20) + Math.floor(point[1] / 10));
+
+    const seatClickable = Boolean(seatPickMode && canChangeSeatNow && mySeat && seat !== mySeat);
+    if (seatClickable) {
+      node.classList.add('seat-selectable');
+      node.addEventListener('click', (evt) => {
+        if (evt.target instanceof Element && evt.target.closest('button')) return;
+        if (p) {
+          showHandBanner('该座位已有玩家，请选择空位', 'error', 900);
+          return;
+        }
+        seatPickMode = false;
+        socket.emit('changeSeat', { seat });
+        showHandBanner(`请求换到 ${seat} 号位`, 'ok', 900);
+        renderStatus();
+        renderSeatMap();
+      });
+    }
 
     if (!p) {
       node.textContent = compact ? `${seat}空位` : `${seat}号位 空位`;
@@ -1901,6 +1952,8 @@ function renderStatus() {
 
   const isHost = roomState.hostId === meId;
   const isPlayer = roomState.myRole === 'player';
+  const canChangeSeatNow = canSelfChangeSeat();
+  if (!canChangeSeatNow) seatPickMode = false;
 
   el.readyBtn.disabled = !isPlayer;
   const waitingAuto = Boolean(g?.finished && autoStartSec > 0);
@@ -1914,6 +1967,8 @@ function renderStatus() {
   el.takeSeatBtn.classList.toggle('hidden', !roomState.canTakeSeat);
   el.becomeSpectatorBtn.classList.toggle('hidden', !roomState.canBecomeSpectator);
   el.changeSeatBtn.classList.toggle('hidden', !isPlayer);
+  el.changeSeatBtn.disabled = !canChangeSeatNow;
+  el.changeSeatBtn.textContent = seatPickMode ? '取消换座' : '换座';
 
   const sessionSec = Math.max(0, Math.ceil((roomState.sessionEndsAt - nowByServer()) / 1000));
   el.sessionTimer.textContent = `时长剩余 ${fmtClock(sessionSec)}`;
@@ -2142,6 +2197,7 @@ socket.on('joinedRoom', ({ playerId }) => {
   clearAllPending();
   setActionPending(false);
   raiseUiExpanded = false;
+  seatPickMode = false;
   clearPreAction(true);
   trackedHandNo = null;
   trackedPhase = null;
@@ -2183,6 +2239,7 @@ socket.on('kicked', (payload) => {
   clearAllPending();
   setActionPending(false);
   raiseUiExpanded = false;
+  seatPickMode = false;
   clearPreAction(true);
   showHandBanner('');
   trackedSeatDealHandNo = null;
@@ -2345,15 +2402,11 @@ el.focusMeBtn.addEventListener('click', () => {
 });
 
 el.changeSeatBtn.addEventListener('click', () => {
-  const me = roomPlayerById(meId);
-  if (!me) return;
-  const maxPlayers = roomState?.settings?.maxPlayers || 9;
-  const seatText = window.prompt(`输入想换到的座位号（1-${maxPlayers}）`, String(me.seat || ''));
-  if (!seatText) return;
-  const raw = Number(seatText);
-  if (!Number.isFinite(raw)) return;
-  const seat = clampInt(raw, 1, maxPlayers);
-  socket.emit('changeSeat', { seat });
+  if (!canSelfChangeSeat()) {
+    showHandBanner('当前在手牌中，暂时不能换座', 'error', 1000);
+    return;
+  }
+  setSeatPickMode(!seatPickMode, true);
 });
 
 el.takeSeatBtn.addEventListener('click', () => socket.emit('takeSeat'));
@@ -2365,6 +2418,7 @@ el.leaveBtn.addEventListener('click', () => {
   clearAllPending();
   setActionPending(false);
   raiseUiExpanded = false;
+  seatPickMode = false;
   clearPreAction(true);
   showHandBanner('');
   trackedSeatDealHandNo = null;
