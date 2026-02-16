@@ -9,87 +9,42 @@ const MAX_PLAYERS = 20;
 const DEFAULT_ROUNDS = 8;
 const DEFAULT_SECONDS = 12;
 
-const QUIZ_BANK = [
-  {
-    question: '春节通常在农历的哪个月份？',
-    options: ['正月', '二月', '十一月', '腊月'],
-    answer: 0,
-  },
-  {
-    question: '“守岁”这个习俗主要发生在什么时候？',
-    options: ['除夕夜', '元宵节', '端午节', '中秋节'],
-    answer: 0,
-  },
-  {
-    question: '下列哪一项最常见于春节贴在门上的装饰？',
-    options: ['窗花和春联', '风铃', '圣诞袜', '万圣节南瓜灯'],
-    answer: 0,
-  },
-  {
-    question: '压岁钱传统上主要寓意什么？',
-    options: ['辟邪保平安', '买零食', '支付房租', '交水电费'],
-    answer: 0,
-  },
-  {
-    question: '春节期间常说“恭喜发财”，下一句通常是？',
-    options: ['红包拿来', '天天喝茶', '注意休息', '早点睡觉'],
-    answer: 0,
-  },
-  {
-    question: '“年夜饭”一般在什么时候吃？',
-    options: ['除夕晚上', '初一中午', '初二早上', '元宵当天'],
-    answer: 0,
-  },
-  {
-    question: '下列哪个通常不是春节的传统活动？',
-    options: ['赛龙舟', '拜年', '贴春联', '放烟花'],
-    answer: 0,
-  },
-  {
-    question: '春节常见的“福”字倒贴，寓意是什么？',
-    options: ['福到了', '字写错了', '纸贴歪了', '为了省胶水'],
-    answer: 0,
-  },
-  {
-    question: '元宵节最具代表性的食物是？',
-    options: ['汤圆', '月饼', '粽子', '饺子'],
-    answer: 0,
-  },
-  {
-    question: '春节联欢晚会通常在哪一天播出？',
-    options: ['除夕', '初一', '初五', '正月十五'],
-    answer: 0,
-  },
-  {
-    question: '“拜年”通常表达哪种心意？',
-    options: ['祝福问候', '借钱', '道歉', '签合同'],
-    answer: 0,
-  },
-  {
-    question: '大多数地区春节期间常见的主色调是？',
-    options: ['红色和金色', '蓝色和灰色', '黑色和白色', '绿色和紫色'],
-    answer: 0,
-  },
-  {
-    question: '春联通常贴在哪里？',
-    options: ['门框两侧', '冰箱背面', '天花板', '地板中央'],
-    answer: 0,
-  },
-  {
-    question: '春节放鞭炮传统上象征什么？',
-    options: ['驱邪迎新', '提醒上班', '降温除尘', '庆祝考试'],
-    answer: 0,
-  },
-  {
-    question: '春节走亲访友时，常见第一句话是？',
-    options: ['新年好', '晚安', '辛苦了', '再见'],
-    answer: 0,
-  },
-  {
-    question: '“团圆”在春节语境里最接近哪层含义？',
-    options: ['家人相聚', '独自旅行', '加班开会', '深夜购物'],
-    answer: 0,
-  },
+const GAME_MODES = Object.freeze({
+  MIX: 'mix',
+  QUIZ: 'quiz',
+  MATH: 'math',
+  FIND: 'find',
+});
+
+const MODE_LABELS = Object.freeze({
+  [GAME_MODES.MIX]: '混合小游戏',
+  [GAME_MODES.QUIZ]: '新春知识题',
+  [GAME_MODES.MATH]: '心算冲刺',
+  [GAME_MODES.FIND]: '找字手速',
+});
+
+const QUIZ_PROMPTS = [
+  { question: '春节通常在农历的哪个月份？', correct: '正月', wrongs: ['二月', '十一月', '腊月'] },
+  { question: '“守岁”这个习俗主要发生在什么时候？', correct: '除夕夜', wrongs: ['元宵节', '端午节', '中秋节'] },
+  { question: '压岁钱传统上主要寓意什么？', correct: '辟邪保平安', wrongs: ['买零食', '支付房租', '交水电费'] },
+  { question: '春节期间常说“恭喜发财”，下一句通常是？', correct: '红包拿来', wrongs: ['天天喝茶', '注意休息', '早点睡觉'] },
+  { question: '“年夜饭”一般在什么时候吃？', correct: '除夕晚上', wrongs: ['初一中午', '初二早上', '元宵当天'] },
+  { question: '元宵节最具代表性的食物是？', correct: '汤圆', wrongs: ['月饼', '粽子', '饺子'] },
+  { question: '春节联欢晚会通常在哪一天播出？', correct: '除夕', wrongs: ['初一', '初五', '正月十五'] },
+  { question: '春联通常贴在哪里？', correct: '门框两侧', wrongs: ['冰箱背面', '天花板', '地板中央'] },
+  { question: '春节放鞭炮传统上象征什么？', correct: '驱邪迎新', wrongs: ['提醒上班', '降温除尘', '庆祝考试'] },
+  { question: '春节走亲访友时，常见第一句话是？', correct: '新年好', wrongs: ['晚安', '辛苦了', '再见'] },
+  { question: '“团圆”在春节语境里最接近哪层含义？', correct: '家人相聚', wrongs: ['独自旅行', '加班开会', '深夜购物'] },
+  { question: '下列哪个通常不是春节传统活动？', correct: '赛龙舟', wrongs: ['拜年', '贴春联', '放烟花'] },
+];
+
+const FIND_SETS = [
+  { target: '福', decoys: ['春', '喜', '财', '禄', '旺', '安'] },
+  { target: '春', decoys: ['泰', '安', '乐', '福', '祥', '庆'] },
+  { target: '财', decoys: ['福', '禄', '旺', '富', '禧', '喜'] },
+  { target: '喜', decoys: ['囍', '禧', '嘉', '庆', '福', '吉'] },
+  { target: '安', decoys: ['宁', '福', '康', '泰', '和', '乐'] },
+  { target: '旺', decoys: ['盛', '发', '财', '兴', '昌', '隆'] },
 ];
 
 const app = express();
@@ -120,6 +75,12 @@ function sanitizeRoomTitle(name) {
   return name.trim().slice(0, 24);
 }
 
+function sanitizeMode(value) {
+  const mode = String(value || '').trim().toLowerCase();
+  if (mode === GAME_MODES.QUIZ || mode === GAME_MODES.MATH || mode === GAME_MODES.FIND) return mode;
+  return GAME_MODES.MIX;
+}
+
 function roomChannel(code) {
   return `party:${code}`;
 }
@@ -133,6 +94,10 @@ function shuffle(list) {
     arr[j] = tmp;
   }
   return arr;
+}
+
+function pickRandom(list) {
+  return list[Math.floor(Math.random() * list.length)];
 }
 
 function makeRoomCode() {
@@ -177,6 +142,10 @@ function getRoomHostName(room) {
   return host ? host.name : '未知';
 }
 
+function modeLabel(mode) {
+  return MODE_LABELS[mode] || MODE_LABELS[GAME_MODES.MIX];
+}
+
 function buildLobbyPayload() {
   const rooms = [...partyRooms.values()]
     .map((room) => ({
@@ -185,6 +154,8 @@ function buildLobbyPayload() {
       hostName: getRoomHostName(room),
       players: room.players.length,
       phase: room.phase,
+      mode: room.mode,
+      modeLabel: modeLabel(room.mode),
       createdAt: room.createdAt,
     }))
     .sort((a, b) => b.createdAt - a.createdAt)
@@ -217,6 +188,8 @@ function buildRoomState(room) {
   const reveal = room.phase === 'reveal' || room.phase === 'finished';
   const question = room.currentQuestion
     ? {
+        kind: room.currentQuestion.kind,
+        label: room.currentQuestion.label,
         text: room.currentQuestion.question,
         options: room.currentQuestion.options,
         correctIndex: reveal ? room.currentQuestion.answer : null,
@@ -227,6 +200,8 @@ function buildRoomState(room) {
     room: {
       code: room.code,
       title: room.title,
+      mode: room.mode,
+      modeLabel: modeLabel(room.mode),
       phase: room.phase,
       hostId: room.hostId,
       hostName: getRoomHostName(room),
@@ -255,8 +230,114 @@ function removeRoom(code) {
   emitLobby();
 }
 
-function pickQuestions(count) {
-  return shuffle(QUIZ_BANK).slice(0, Math.min(Math.max(1, count), QUIZ_BANK.length));
+function withShuffledOptions(correct, wrongs) {
+  const options = shuffle([correct, ...wrongs.slice(0, 3)]);
+  return {
+    options,
+    answer: options.indexOf(correct),
+  };
+}
+
+function buildQuizQuestion() {
+  const prompt = pickRandom(QUIZ_PROMPTS);
+  const { options, answer } = withShuffledOptions(prompt.correct, prompt.wrongs);
+  return {
+    kind: GAME_MODES.QUIZ,
+    label: modeLabel(GAME_MODES.QUIZ),
+    question: prompt.question,
+    options,
+    answer,
+    baseScore: 110,
+  };
+}
+
+function buildMathQuestion() {
+  const opRoll = Math.random();
+  let a = clampInt(Math.random() * 30 + 8, 8, 37, 18);
+  let b = clampInt(Math.random() * 18 + 2, 2, 20, 6);
+  let question = '';
+  let correct = 0;
+
+  if (opRoll < 0.45) {
+    question = `${a} + ${b} = ?`;
+    correct = a + b;
+  } else if (opRoll < 0.8) {
+    if (a < b) {
+      const t = a;
+      a = b;
+      b = t;
+    }
+    question = `${a} - ${b} = ?`;
+    correct = a - b;
+  } else {
+    a = clampInt(Math.random() * 9 + 3, 3, 11, 6);
+    b = clampInt(Math.random() * 8 + 2, 2, 9, 4);
+    question = `${a} × ${b} = ?`;
+    correct = a * b;
+  }
+
+  const wrongSet = new Set();
+  while (wrongSet.size < 3) {
+    const offset = clampInt(Math.random() * 9 + 1, 1, 9, 3) * (Math.random() < 0.5 ? -1 : 1);
+    const candidate = Math.max(0, correct + offset);
+    if (candidate !== correct) wrongSet.add(candidate);
+  }
+
+  const { options, answer } = withShuffledOptions(String(correct), [...wrongSet].map((n) => String(n)));
+
+  return {
+    kind: GAME_MODES.MATH,
+    label: modeLabel(GAME_MODES.MATH),
+    question,
+    options,
+    answer,
+    baseScore: 120,
+  };
+}
+
+function buildFindQuestion() {
+  const set = pickRandom(FIND_SETS);
+  const decoys = shuffle(set.decoys).slice(0, 3);
+  const { options, answer } = withShuffledOptions(set.target, decoys);
+
+  return {
+    kind: GAME_MODES.FIND,
+    label: modeLabel(GAME_MODES.FIND),
+    question: `请快速找出“${set.target}”字`,
+    options,
+    answer,
+    baseScore: 95,
+  };
+}
+
+function buildQuestionByKind(kind) {
+  if (kind === GAME_MODES.QUIZ) return buildQuizQuestion();
+  if (kind === GAME_MODES.MATH) return buildMathQuestion();
+  return buildFindQuestion();
+}
+
+function pickRoundKinds(mode, totalRounds) {
+  if (mode !== GAME_MODES.MIX) {
+    return Array(totalRounds).fill(mode);
+  }
+
+  const kinds = [GAME_MODES.QUIZ, GAME_MODES.MATH, GAME_MODES.FIND];
+  const result = [];
+  let deck = shuffle(kinds);
+
+  for (let i = 0; i < totalRounds; i += 1) {
+    if (!deck.length) {
+      deck = shuffle(kinds);
+    }
+    result.push(deck.pop());
+  }
+
+  return result;
+}
+
+function pickQuestions(totalRounds, mode) {
+  const kinds = pickRoundKinds(mode, totalRounds);
+  return kinds.map((kind) => buildQuestionByKind(kind));
 }
 
 function resetPlayersForNewMatch(room) {
@@ -312,7 +393,7 @@ function finalizeRound(code) {
     if (submission.choice === answer) {
       const leftMs = Math.max(0, room.roundEndsAt - submission.at);
       const speedBonus = Math.min(120, Math.floor(leftMs / 100));
-      const gain = 100 + speedBonus;
+      const gain = room.currentQuestion.baseScore + speedBonus;
       player.score += gain;
       player.correct += 1;
       player.lastGain = gain;
@@ -347,7 +428,7 @@ function nextRoundOrFinish(code) {
 }
 
 function startMatch(room) {
-  room.questions = pickQuestions(room.totalRounds);
+  room.questions = pickQuestions(room.totalRounds, room.mode);
   room.roundIndex = 0;
   room.currentQuestion = null;
   room.roundEndsAt = null;
@@ -437,6 +518,7 @@ io.on('connection', (socket) => {
     const title = sanitizeRoomTitle(payload.title) || `除夕局-${code}`;
     const totalRounds = clampInt(payload.totalRounds, 3, 12, DEFAULT_ROUNDS);
     const roundSeconds = clampInt(payload.roundSeconds, 8, 25, DEFAULT_SECONDS);
+    const mode = sanitizeMode(payload.mode);
 
     const hostPlayer = {
       id: socket.id,
@@ -452,6 +534,7 @@ io.on('connection', (socket) => {
     const room = {
       code,
       title,
+      mode,
       hostId: socket.id,
       phase: 'lobby',
       createdAt: Date.now(),
