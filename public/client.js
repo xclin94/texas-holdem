@@ -4,6 +4,7 @@ let lobbyState = { rooms: [], serverNow: Date.now() };
 let roomState = null;
 let meId = null;
 let replayState = null;
+let lastLobbyFetchAt = 0;
 
 const $ = (id) => document.getElementById(id);
 
@@ -124,6 +125,23 @@ function loadName() {
 function parseNum(input, fallback) {
   const n = Number(input);
   return Number.isFinite(n) ? Math.floor(n) : fallback;
+}
+
+function ensureConnected() {
+  if (socket.connected) return true;
+  showNotice(el.notice, '网络连接中，请稍后再试');
+  socket.connect();
+  return false;
+}
+
+function ensureNickname() {
+  let name = el.nameInput.value.trim();
+  if (name) return name;
+  const asked = (window.prompt('请输入昵称后加入') || '').trim();
+  if (!asked) return '';
+  el.nameInput.value = asked;
+  persistName();
+  return asked;
 }
 
 function roomPlayerById(id) {
@@ -853,21 +871,50 @@ function renderRoom() {
 }
 
 function quickJoin(roomId, spectator, hasPassword) {
-  const name = el.nameInput.value.trim();
+  if (!ensureConnected()) return;
+  const name = ensureNickname();
   if (!name) {
-    showNotice(el.notice, '先输入你的昵称');
+    showNotice(el.notice, '需要先输入昵称');
     return;
   }
   let password = '';
   if (hasPassword) {
-    password = window.prompt('请输入房间密码') || '';
+    const asked = window.prompt('请输入房间密码');
+    if (asked === null) return;
+    password = asked || '';
   }
   socket.emit('joinRoom', { roomId, name, password, spectator });
 }
 
 socket.on('lobbyRooms', (payload) => {
   lobbyState = payload || { rooms: [], serverNow: Date.now() };
+  lastLobbyFetchAt = Date.now();
   renderLobbyRooms();
+});
+
+socket.on('connect', () => {
+  socket.emit('listRooms');
+  if (el.lobbyView.classList.contains('hidden')) {
+    showNotice(el.tableNotice, '');
+  } else {
+    showNotice(el.notice, '');
+  }
+});
+
+socket.on('disconnect', () => {
+  if (el.lobbyView.classList.contains('hidden')) {
+    showNotice(el.tableNotice, '连接已断开，正在尝试重连...');
+  } else {
+    showNotice(el.notice, '连接已断开，正在尝试重连...');
+  }
+});
+
+socket.on('connect_error', () => {
+  if (el.lobbyView.classList.contains('hidden')) {
+    showNotice(el.tableNotice, '连接失败，请检查网络后重试');
+  } else {
+    showNotice(el.notice, '连接失败，请检查网络后重试');
+  }
 });
 
 socket.on('joinedRoom', ({ playerId }) => {
@@ -909,7 +956,8 @@ socket.on('errorMessage', (msg) => {
 });
 
 el.createBtn.addEventListener('click', () => {
-  const name = el.nameInput.value.trim();
+  if (!ensureConnected()) return;
+  const name = ensureNickname();
   if (!name) {
     showNotice(el.notice, '请输入昵称');
     return;
@@ -919,7 +967,8 @@ el.createBtn.addEventListener('click', () => {
 });
 
 el.joinBtn.addEventListener('click', () => {
-  const name = el.nameInput.value.trim();
+  if (!ensureConnected()) return;
+  const name = ensureNickname();
   if (!name) {
     showNotice(el.notice, '请输入昵称');
     return;
@@ -1015,6 +1064,10 @@ setInterval(() => {
   if (el.lobbyView.classList.contains('hidden')) {
     if (roomState) renderStatus();
   } else {
+    if (Date.now() - lastLobbyFetchAt > 3000 && socket.connected) {
+      socket.emit('listRooms');
+      lastLobbyFetchAt = Date.now();
+    }
     renderLobbyRooms();
   }
 }, 1000);
