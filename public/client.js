@@ -5,6 +5,12 @@ let roomState = null;
 let meId = null;
 let replayState = null;
 let lastLobbyFetchAt = 0;
+let joinPending = false;
+let createPending = false;
+let joinPendingTimer = null;
+let createPendingTimer = null;
+
+const REQUEST_TIMEOUT_MS = 7000;
 
 const $ = (id) => document.getElementById(id);
 
@@ -109,13 +115,17 @@ const el = {
   sendChatBtn: $('sendChatBtn'),
 };
 
-function showNotice(target, msg) {
+function showNotice(target, msg, tone = 'info') {
   if (!msg) {
     target.classList.add('hidden');
     target.textContent = '';
+    target.classList.remove('error', 'ok');
     return;
   }
   target.classList.remove('hidden');
+  target.classList.remove('error', 'ok');
+  if (tone === 'error') target.classList.add('error');
+  if (tone === 'ok') target.classList.add('ok');
   target.textContent = msg;
 }
 
@@ -135,19 +145,13 @@ function parseNum(input, fallback) {
 
 function ensureConnected() {
   if (socket.connected) return true;
-  showNotice(el.notice, '网络连接中，请稍后再试');
+  showNotice(el.notice, '网络连接中，请稍后再试', 'error');
   socket.connect();
   return false;
 }
 
 function ensureNickname() {
-  let name = el.nameInput.value.trim();
-  if (name) return name;
-  const asked = (window.prompt('请输入昵称后加入') || '').trim();
-  if (!asked) return '';
-  el.nameInput.value = asked;
-  persistName();
-  return asked;
+  return el.nameInput.value.trim();
 }
 
 function closeLobbyPanels() {
@@ -163,6 +167,58 @@ function openCreatePanel() {
 function openJoinPanel() {
   el.createPanel.classList.add('hidden');
   el.joinPanel.classList.remove('hidden');
+}
+
+function refreshPendingButtons() {
+  el.joinBtn.disabled = joinPending;
+  el.createBtn.disabled = createPending;
+  el.joinBtn.textContent = joinPending ? '加入中...' : '确认加入';
+  el.createBtn.textContent = createPending ? '创建中...' : '确认创建';
+}
+
+function clearJoinPending() {
+  joinPending = false;
+  if (joinPendingTimer) {
+    clearTimeout(joinPendingTimer);
+    joinPendingTimer = null;
+  }
+  refreshPendingButtons();
+}
+
+function clearCreatePending() {
+  createPending = false;
+  if (createPendingTimer) {
+    clearTimeout(createPendingTimer);
+    createPendingTimer = null;
+  }
+  refreshPendingButtons();
+}
+
+function clearAllPending() {
+  clearJoinPending();
+  clearCreatePending();
+}
+
+function startJoinPending(roomId) {
+  clearJoinPending();
+  joinPending = true;
+  refreshPendingButtons();
+  joinPendingTimer = setTimeout(() => {
+    if (!joinPending) return;
+    clearJoinPending();
+    showNotice(el.notice, `加入房间超时：${roomId || '-'}，请检查房间号/密码/网络后重试`, 'error');
+  }, REQUEST_TIMEOUT_MS);
+}
+
+function startCreatePending() {
+  clearCreatePending();
+  createPending = true;
+  refreshPendingButtons();
+  createPendingTimer = setTimeout(() => {
+    if (!createPending) return;
+    clearCreatePending();
+    showNotice(el.notice, '创建房间超时，请检查网络后重试', 'error');
+  }, REQUEST_TIMEOUT_MS);
 }
 
 function roomPlayerById(id) {
@@ -891,20 +947,46 @@ function renderRoom() {
   renderLogs();
 }
 
+function emitJoinRequest({ roomId, name, password, spectator }) {
+  if (joinPending) {
+    showNotice(el.notice, '正在加入房间，请稍候', 'error');
+    return;
+  }
+  startJoinPending(roomId);
+  socket.emit('joinRoom', { roomId, name, password, spectator });
+}
+
 function quickJoin(roomId, spectator, hasPassword) {
   if (!ensureConnected()) return;
   const name = ensureNickname();
   if (!name) {
-    showNotice(el.notice, '需要先输入昵称');
+    showNotice(el.notice, '请先输入昵称再加入', 'error');
+    el.nameInput.focus();
     return;
   }
-  let password = '';
-  if (hasPassword) {
-    const asked = window.prompt('请输入房间密码');
-    if (asked === null) return;
-    password = asked || '';
+  persistName();
+
+  const normalizedRoomId = String(roomId || '').toUpperCase().trim();
+  if (!normalizedRoomId) {
+    showNotice(el.notice, '房间号无效', 'error');
+    return;
   }
-  socket.emit('joinRoom', { roomId, name, password, spectator });
+
+  if (hasPassword) {
+    el.joinRoomInput.value = normalizedRoomId;
+    el.joinSpectatorInput.checked = Boolean(spectator);
+    openJoinPanel();
+    showNotice(el.notice, '该房间需要密码，请填写后点击确认加入', 'error');
+    el.joinPasswordInput.focus();
+    return;
+  }
+
+  emitJoinRequest({
+    roomId: normalizedRoomId,
+    name,
+    password: '',
+    spectator: Boolean(spectator),
+  });
 }
 
 socket.on('lobbyRooms', (payload) => {
@@ -914,6 +996,7 @@ socket.on('lobbyRooms', (payload) => {
 });
 
 socket.on('connect', () => {
+  clearAllPending();
   socket.emit('listRooms');
   if (el.lobbyView.classList.contains('hidden')) {
     showNotice(el.tableNotice, '');
@@ -923,22 +1006,25 @@ socket.on('connect', () => {
 });
 
 socket.on('disconnect', () => {
+  clearAllPending();
   if (el.lobbyView.classList.contains('hidden')) {
-    showNotice(el.tableNotice, '连接已断开，正在尝试重连...');
+    showNotice(el.tableNotice, '连接已断开，正在尝试重连...', 'error');
   } else {
-    showNotice(el.notice, '连接已断开，正在尝试重连...');
+    showNotice(el.notice, '连接已断开，正在尝试重连...', 'error');
   }
 });
 
 socket.on('connect_error', () => {
+  clearAllPending();
   if (el.lobbyView.classList.contains('hidden')) {
-    showNotice(el.tableNotice, '连接失败，请检查网络后重试');
+    showNotice(el.tableNotice, '连接失败，请检查网络后重试', 'error');
   } else {
-    showNotice(el.notice, '连接失败，请检查网络后重试');
+    showNotice(el.notice, '连接失败，请检查网络后重试', 'error');
   }
 });
 
 socket.on('joinedRoom', ({ playerId }) => {
+  clearAllPending();
   meId = playerId;
   replayState = null;
   closeLobbyPanels();
@@ -965,7 +1051,8 @@ socket.on('handReplayData', (replay) => {
 });
 
 socket.on('kicked', (payload) => {
-  showNotice(el.notice, payload?.reason || '你已被移出房间');
+  clearAllPending();
+  showNotice(el.notice, payload?.reason || '你已被移出房间', 'error');
   roomState = null;
   replayState = null;
   el.tableView.classList.add('hidden');
@@ -974,7 +1061,8 @@ socket.on('kicked', (payload) => {
 });
 
 socket.on('errorMessage', (msg) => {
-  showNotice(el.tableView.classList.contains('hidden') ? el.notice : el.tableNotice, msg);
+  clearAllPending();
+  showNotice(el.tableView.classList.contains('hidden') ? el.notice : el.tableNotice, msg, 'error');
 });
 
 el.openCreatePanelBtn.addEventListener('click', () => {
@@ -995,25 +1083,44 @@ el.closeJoinPanelBtn.addEventListener('click', () => {
 
 el.createBtn.addEventListener('click', () => {
   if (!ensureConnected()) return;
-  const name = ensureNickname();
-  if (!name) {
-    showNotice(el.notice, '请输入昵称');
+  if (createPending) {
+    showNotice(el.notice, '正在创建房间，请稍候', 'error');
     return;
   }
+  const name = ensureNickname();
+  if (!name) {
+    showNotice(el.notice, '请输入昵称', 'error');
+    el.nameInput.focus();
+    return;
+  }
+  const payload = collectCreateSettings();
+  if (!payload.roomName) payload.roomName = '好友局';
   persistName();
-  socket.emit('createRoom', { name, ...collectCreateSettings() });
+  startCreatePending();
+  socket.emit('createRoom', { name, ...payload });
 });
 
 el.joinBtn.addEventListener('click', () => {
   if (!ensureConnected()) return;
+  if (joinPending) {
+    showNotice(el.notice, '正在加入房间，请稍候', 'error');
+    return;
+  }
   const name = ensureNickname();
   if (!name) {
-    showNotice(el.notice, '请输入昵称');
+    showNotice(el.notice, '请输入昵称', 'error');
+    el.nameInput.focus();
+    return;
+  }
+  const roomId = el.joinRoomInput.value.trim().toUpperCase();
+  if (!roomId) {
+    showNotice(el.notice, '请输入房间号', 'error');
+    el.joinRoomInput.focus();
     return;
   }
   persistName();
-  socket.emit('joinRoom', {
-    roomId: el.joinRoomInput.value.trim().toUpperCase(),
+  emitJoinRequest({
+    roomId,
     name,
     password: el.joinPasswordInput.value.trim(),
     spectator: el.joinSpectatorInput.checked,
@@ -1030,6 +1137,7 @@ el.readyBtn.addEventListener('click', () => socket.emit('toggleReady'));
 el.startBtn.addEventListener('click', () => socket.emit('startHand'));
 
 el.leaveBtn.addEventListener('click', () => {
+  clearAllPending();
   socket.emit('leaveRoom');
   roomState = null;
   replayState = null;
@@ -1048,15 +1156,15 @@ el.copyRoomBtn.addEventListener('click', async () => {
     } else if (!fallbackCopy(text)) {
       throw new Error('copy-failed');
     }
-    showNotice(el.tableNotice, '房间号已复制');
+    showNotice(el.tableNotice, '房间号已复制', 'ok');
   } catch {
     const ok = fallbackCopy(text);
     if (ok) {
-      showNotice(el.tableNotice, '房间号已复制');
+      showNotice(el.tableNotice, '房间号已复制', 'ok');
       return;
     }
     window.prompt('复制房间号（手动复制）', text);
-    showNotice(el.tableNotice, '当前浏览器限制复制，已弹出手动复制框');
+    showNotice(el.tableNotice, '当前浏览器限制复制，已弹出手动复制框', 'error');
   }
 });
 
@@ -1116,6 +1224,7 @@ window.addEventListener('resize', () => {
 });
 
 loadName();
+refreshPendingButtons();
 (() => {
   const params = new URLSearchParams(window.location.search);
   const room = (params.get('room') || '').trim().toUpperCase();

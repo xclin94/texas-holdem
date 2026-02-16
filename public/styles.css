@@ -130,7 +130,8 @@ label.check {
   flex-direction: row;
   align-items: center;
   gap: 8px;
-  margin-top: 20px;
+  margin-top: 0;
+  justify-content: flex-start;
 }
 
 .field-row {
@@ -237,7 +238,23 @@ label.check {
   background: rgba(0, 0, 0, 0.2);
 }
 
-input {
+.join-toggle-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.join-toggle-grid .check {
+  margin-top: 0;
+  min-height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+input:not([type='checkbox']) {
   width: 100%;
   border-radius: 10px;
   border: 1px solid #36624d;
@@ -248,8 +265,16 @@ input {
   outline: none;
 }
 
-input:focus {
+input:not([type='checkbox']):focus {
   border-color: var(--gold);
+}
+
+input[type='checkbox'] {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--gold);
 }
 
 .btn {
@@ -354,6 +379,18 @@ input:focus {
   color: #ffe3a9;
   padding: 8px 10px;
   margin-bottom: 12px;
+}
+
+.notice.error {
+  border-color: rgba(255, 116, 140, 0.55);
+  background: rgba(123, 31, 42, 0.42);
+  color: #ffd3db;
+}
+
+.notice.ok {
+  border-color: rgba(126, 229, 170, 0.45);
+  background: rgba(31, 138, 72, 0.28);
+  color: #dcffe8;
 }
 
 .status-row {
@@ -733,6 +770,14 @@ input:focus {
     min-height: 44px;
   }
 
+  .join-toggle-grid {
+    margin-top: 6px;
+  }
+
+  .join-toggle-grid .check {
+    min-height: 44px;
+  }
+
   .create-row-two,
   .create-row-quad,
   .create-row-mix {
@@ -854,7 +899,7 @@ input:focus {
     padding: 11px 8px;
   }
 
-  input {
+  input:not([type='checkbox']) {
     font-size: 16px;
     padding: 10px;
   }
