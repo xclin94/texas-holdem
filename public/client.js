@@ -35,6 +35,7 @@ let raiseUiExpanded = false;
 let preActionMode = null;
 let preActionToken = null;
 let actionCueTimer = null;
+let serverClockOffsetMs = 0;
 let audioCtx = null;
 let swipeStart = null;
 
@@ -530,6 +531,46 @@ function playTurnCue() {
   }
 }
 
+function playActionCue(kind) {
+  if (!uiSoundEnabled) return;
+  const AudioCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtor) return;
+  try {
+    if (!audioCtx || audioCtx.state === 'closed') {
+      audioCtx = new AudioCtor();
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {});
+    }
+
+    const presets = {
+      check: { type: 'triangle', from: 420, to: 350, dur: 0.08, gain: 0.08 },
+      call: { type: 'triangle', from: 560, to: 480, dur: 0.1, gain: 0.1 },
+      raise: { type: 'sawtooth', from: 640, to: 900, dur: 0.11, gain: 0.11 },
+      bet: { type: 'sawtooth', from: 620, to: 860, dur: 0.11, gain: 0.11 },
+      fold: { type: 'triangle', from: 260, to: 190, dur: 0.1, gain: 0.07 },
+      allin: { type: 'square', from: 760, to: 1080, dur: 0.13, gain: 0.12 },
+      straddle: { type: 'square', from: 700, to: 980, dur: 0.12, gain: 0.12 },
+    };
+    const p = presets[kind] || presets.call;
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = p.type;
+    osc.frequency.setValueAtTime(p.from, now);
+    osc.frequency.exponentialRampToValueAtTime(p.to, now + p.dur);
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.exponentialRampToValueAtTime(p.gain, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + p.dur + 0.02);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(now);
+    osc.stop(now + p.dur + 0.03);
+  } catch {
+    // Ignore autoplay/device limitations.
+  }
+}
+
 function setActionPending(v) {
   actionPending = Boolean(v);
   if (actionPendingTimer) {
@@ -691,6 +732,21 @@ function fmtClock(sec) {
   return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
 }
 
+function syncServerClock(serverNow) {
+  const ts = Number(serverNow);
+  if (!Number.isFinite(ts)) return;
+  const targetOffset = ts - Date.now();
+  if (Math.abs(targetOffset - serverClockOffsetMs) > 5000) {
+    serverClockOffsetMs = targetOffset;
+    return;
+  }
+  serverClockOffsetMs = Math.round(serverClockOffsetMs * 0.7 + targetOffset * 0.3);
+}
+
+function nowByServer() {
+  return Date.now() + serverClockOffsetMs;
+}
+
 function fallbackCopy(text) {
   const area = document.createElement('textarea');
   area.value = text;
@@ -802,7 +858,7 @@ function renderLobbyRooms() {
     const meta = document.createElement('div');
     meta.className = 'meta';
 
-    const leftSec = Math.max(0, Math.ceil((room.expiresAt - Date.now()) / 1000));
+    const leftSec = Math.max(0, Math.ceil((room.expiresAt - nowByServer()) / 1000));
     const timeText = room.expired ? '已到期' : `剩余 ${fmtClock(leftSec)}`;
     const tournament = room.tournamentMode
       ? `锦标赛 L${room.blindLevel} 每${room.blindIntervalMinutes}分钟升级`
@@ -1445,9 +1501,9 @@ function renderResult() {
     .map((p, idx) => `边池${idx + 1}: ${p.amount} -> ${(p.winners || []).map((id) => roomMemberName(id)).join('/')} ${p.handName ? `(${p.handName})` : ''}`)
     .join('<br/>');
   const canContinue = Boolean(roomState?.canStart);
-  const autoStartSec = roomState?.autoStartAt ? Math.max(0, Math.ceil((roomState.autoStartAt - Date.now()) / 1000)) : 0;
+  const autoStartSec = roomState?.autoStartAt ? Math.max(0, Math.ceil((roomState.autoStartAt - nowByServer()) / 1000)) : 0;
   const autoStartDelayMs = Math.max(800, Number(roomState?.autoStartDelayMs || 2200));
-  const autoStartRemainMs = roomState?.autoStartAt ? Math.max(0, roomState.autoStartAt - Date.now()) : 0;
+  const autoStartRemainMs = roomState?.autoStartAt ? Math.max(0, roomState.autoStartAt - nowByServer()) : 0;
   const autoStartPct = Math.max(0, Math.min(100, Math.round((autoStartRemainMs / autoStartDelayMs) * 100)));
   const iAmHost = roomState?.hostId === meId;
   const cta = autoStartSec > 0
@@ -1612,6 +1668,7 @@ function tryAutoPreAction(actionState) {
   clearPreAction(false);
   renderPreActionBox(false);
   showHandBanner(`提前操作：自动${action === 'check' ? '过牌' : '弃牌'}`, 'ok', 1100);
+  playActionCue(action);
   sendPlayerAction({ action });
   return true;
 }
@@ -1773,7 +1830,7 @@ function renderStatus() {
   el.roomIdText.textContent = roomState?.roomId || '-';
   el.roomModeText.textContent = `${roomState?.settings?.mode || 'NLH'} · ${roomState?.myRole === 'spectator' ? '观战中' : '玩家'} · ${roomState?.settings?.tournamentMode ? '锦标赛' : '现金桌'}`;
 
-  const autoStartSec = roomState?.autoStartAt ? Math.max(0, Math.ceil((roomState.autoStartAt - Date.now()) / 1000)) : 0;
+  const autoStartSec = roomState?.autoStartAt ? Math.max(0, Math.ceil((roomState.autoStartAt - nowByServer()) / 1000)) : 0;
   if (g?.finished && autoStartSec > 0) {
     el.phaseText.textContent = `本手结束 · ${autoStartSec}s后自动下一手`;
   } else {
@@ -1794,7 +1851,7 @@ function renderStatus() {
   el.blindText.textContent = `盲注 ${blind.smallBlind} / ${blind.bigBlind}`;
   el.blindLevelText.textContent = `级别 L${blind.level || 1}`;
   if (roomState.settings.tournamentMode && blind.nextLevelAt) {
-    const left = Math.max(0, Math.ceil((blind.nextLevelAt - Date.now()) / 1000));
+    const left = Math.max(0, Math.ceil((blind.nextLevelAt - nowByServer()) / 1000));
     el.nextBlindText.textContent = `下级别 ${fmtClock(left)}`;
   } else {
     el.nextBlindText.textContent = roomState.settings.tournamentMode ? '下级别 --:--' : '现金桌不涨盲';
@@ -1820,24 +1877,27 @@ function renderStatus() {
   el.becomeSpectatorBtn.classList.toggle('hidden', !roomState.canBecomeSpectator);
   el.changeSeatBtn.classList.toggle('hidden', !isPlayer);
 
-  const sessionSec = Math.max(0, Math.ceil((roomState.sessionEndsAt - Date.now()) / 1000));
+  const sessionSec = Math.max(0, Math.ceil((roomState.sessionEndsAt - nowByServer()) / 1000));
   el.sessionTimer.textContent = `时长剩余 ${fmtClock(sessionSec)}`;
 
-  const turnSec = g?.turnDeadlineAt ? Math.max(0, Math.ceil((g.turnDeadlineAt - Date.now()) / 1000)) : null;
-  el.turnTimerText.textContent = turnSec === null ? '--' : `${turnSec}s`;
+  const turnRawSec = g?.turnDeadlineAt ? Math.ceil((g.turnDeadlineAt - nowByServer()) / 1000) : null;
+  const turnSec = turnRawSec === null ? null : Math.max(0, turnRawSec);
+  el.turnTimerText.textContent = turnSec === null ? '--' : turnSec > 0 ? `${turnSec}s` : '即将结算';
   const myTurn = Boolean(g && !g.finished && g.turnId === meId);
-  const urgentTurn = Boolean(myTurn && turnSec !== null && turnSec <= 8);
+  const urgentTurn = Boolean(myTurn && turnSec !== null && turnSec > 0 && turnSec <= 8);
   el.turnTimerText.classList.toggle('turn-timer-urgent', urgentTurn);
 
   if (el.turnWarning) {
     let warning = '';
-    if (myTurn && turnSec !== null && turnSec <= 12) {
+    if (myTurn && turnSec !== null && turnSec > 0 && turnSec <= 12) {
       if (roomState?.actionState?.mode === 'straddle') {
         warning = `请在 ${turnSec}s 内决定是否 straddle，超时将自动跳过`;
       } else {
         const timeoutAction = roomState?.actionState?.toCall > 0 ? '弃牌' : '过牌';
         warning = `倒计时 ${turnSec}s，超时将自动${timeoutAction}`;
       }
+    } else if (myTurn && turnRawSec !== null && turnRawSec <= 0) {
+      warning = '等待服务器处理超时动作...';
     }
     el.turnWarning.textContent = warning;
     el.turnWarning.classList.toggle('hidden', !warning);
@@ -2005,6 +2065,7 @@ function quickJoin(roomId, spectator, hasPassword) {
 
 socket.on('lobbyRooms', (payload) => {
   lobbyState = payload || { rooms: [], serverNow: Date.now() };
+  syncServerClock(lobbyState.serverNow);
   lastLobbyFetchAt = Date.now();
   renderLobbyRooms();
 });
@@ -2064,6 +2125,7 @@ socket.on('joinedRoom', ({ playerId }) => {
 socket.on('roomState', (state) => {
   setActionPending(false);
   roomState = state;
+  syncServerClock(state?.serverNow);
   renderRoom();
 });
 
@@ -2302,22 +2364,26 @@ el.copyRoomBtn.addEventListener('click', async () => {
 
 el.foldBtn.addEventListener('click', () => {
   raiseUiExpanded = false;
+  playActionCue('fold');
   sendPlayerAction({ action: 'fold' });
 });
 el.checkBtn.addEventListener('click', () => {
   const actionState = roomState?.actionState;
   if (!actionState || !(actionState.canCheck && actionState.toCall === 0)) return;
   raiseUiExpanded = false;
+  playActionCue('check');
   sendPlayerAction({ action: 'check' });
 });
 el.callBtn.addEventListener('click', () => {
   const actionState = roomState?.actionState;
   if (!actionState || !(actionState.canCall && actionState.toCall > 0)) return;
   raiseUiExpanded = false;
+  playActionCue('call');
   sendPlayerAction({ action: 'call' });
 });
 el.allinBtn.addEventListener('click', () => {
   raiseUiExpanded = false;
+  playActionCue('allin');
   sendPlayerAction({ action: 'allin' });
 });
 
@@ -2332,6 +2398,7 @@ el.betBtn.addEventListener('click', () => {
   const amount = parseNum(el.betRangeInput.value || el.betInput.value, 0);
   const action = actionState.canBet ? 'bet' : 'raise';
   raiseUiExpanded = false;
+  playActionCue(action);
   sendPlayerAction({ action, amount });
 });
 
@@ -2348,6 +2415,7 @@ quickRaiseButtons.forEach((btn) => {
     updateBetRange(roomState.actionState, target);
     const action = roomState.actionState.canBet ? 'bet' : 'raise';
     raiseUiExpanded = false;
+    playActionCue(action);
     sendPlayerAction({ action, amount: target });
   });
 });
@@ -2390,6 +2458,7 @@ el.preActionClearBtn.addEventListener('click', () => {
 
 el.straddleBtn.addEventListener('click', () => {
   const amount = parseNum(el.straddleInput.value, 0);
+  playActionCue('straddle');
   sendPlayerAction({ action: 'straddle', amount });
 });
 
