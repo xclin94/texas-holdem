@@ -567,3 +567,127 @@ input:focus {
     width: 150px;
   }
 }
+
+@media (max-width: 760px) {
+  .app {
+    padding: 10px;
+  }
+
+  .hero h1 {
+    font-size: 28px;
+  }
+
+  .card {
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .status-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .blind-row {
+    gap: 6px;
+    font-size: 12px;
+  }
+
+  .table-canvas {
+    min-height: 620px;
+  }
+
+  .table-oval {
+    width: 98%;
+    height: 200px;
+  }
+
+  .table-center-title {
+    font-size: 12px;
+  }
+
+  .cards {
+    gap: 6px;
+    min-height: 48px;
+  }
+
+  .card-face {
+    width: 40px;
+    height: 48px;
+    font-size: 13px;
+  }
+
+  .seat-node {
+    width: 120px;
+    min-height: 88px;
+    padding: 6px;
+    border-radius: 10px;
+  }
+
+  .seat-node.compact .mini-actions {
+    display: none;
+  }
+
+  .seat-node.empty {
+    width: 74px;
+    min-height: 34px;
+    font-size: 10px;
+    padding: 4px;
+  }
+
+  .seat-head {
+    font-size: 12px;
+    margin-bottom: 2px;
+    line-height: 1.2;
+  }
+
+  .seat-sub {
+    font-size: 10px;
+    line-height: 1.2;
+    margin-top: 2px;
+  }
+
+  .badges {
+    gap: 4px;
+    margin: 3px 0;
+  }
+
+  .badge {
+    font-size: 10px;
+    padding: 1px 6px;
+  }
+
+  .seat-cards {
+    margin-top: 4px;
+    gap: 4px;
+  }
+
+  .seat-cards .card-face {
+    width: 22px;
+    height: 30px;
+    border-radius: 6px;
+    font-size: 10px;
+  }
+
+  .action-panel {
+    position: sticky;
+    bottom: 6px;
+    z-index: 30;
+    border-color: rgba(232, 187, 97, 0.45);
+    background: rgba(8, 27, 19, 0.97);
+  }
+
+  .action-panel .actions .btn {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 0;
+    padding: 11px 8px;
+  }
+
+  input {
+    font-size: 16px;
+    padding: 10px;
+  }
+
+  .logs {
+    min-height: 150px;
+    max-height: 190px;
+  }
+}

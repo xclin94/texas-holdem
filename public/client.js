@@ -301,8 +301,12 @@ function createAdminButtons(targetId) {
   return box;
 }
 
-function getSeatLayout(maxPlayers) {
-  const layouts = {
+function isMobileView() {
+  return window.innerWidth <= 760;
+}
+
+function getSeatLayout(maxPlayers, compact) {
+  const desktopLayouts = {
     2: [
       [50, 85],
       [50, 15],
@@ -364,7 +368,71 @@ function getSeatLayout(maxPlayers) {
       [12, 60],
     ],
   };
-  return layouts[maxPlayers] || layouts[9];
+  const mobileLayouts = {
+    2: [
+      [50, 86],
+      [50, 15],
+    ],
+    3: [
+      [50, 88],
+      [80, 62],
+      [20, 62],
+    ],
+    4: [
+      [50, 88],
+      [84, 54],
+      [50, 14],
+      [16, 54],
+    ],
+    5: [
+      [50, 89],
+      [80, 68],
+      [72, 16],
+      [28, 16],
+      [20, 68],
+    ],
+    6: [
+      [50, 90],
+      [80, 72],
+      [88, 46],
+      [68, 16],
+      [32, 16],
+      [12, 46],
+    ],
+    7: [
+      [50, 90],
+      [74, 82],
+      [88, 63],
+      [84, 34],
+      [60, 10],
+      [40, 10],
+      [12, 45],
+    ],
+    8: [
+      [50, 90],
+      [73, 82],
+      [88, 65],
+      [90, 40],
+      [74, 14],
+      [26, 14],
+      [10, 40],
+      [12, 65],
+    ],
+    9: [
+      [50, 90],
+      [72, 84],
+      [86, 68],
+      [89, 46],
+      [84, 24],
+      [50, 8],
+      [16, 24],
+      [11, 46],
+      [14, 68],
+    ],
+  };
+
+  const source = compact ? mobileLayouts : desktopLayouts;
+  return source[maxPlayers] || source[9];
 }
 
 function labelsForCount(count) {
@@ -417,7 +485,8 @@ function renderSeatMap() {
   el.seatMap.innerHTML = '';
   const players = roomState?.players || [];
   const maxPlayers = roomState?.settings?.maxPlayers || 9;
-  const layout = getSeatLayout(maxPlayers);
+  const compact = isMobileView();
+  const layout = getSeatLayout(maxPlayers, compact);
   const posMap = buildPositionLabelMap();
 
   for (let seat = 1; seat <= maxPlayers; seat += 1) {
@@ -425,12 +494,12 @@ function renderSeatMap() {
     const p = players.find((x) => x.seat === seat);
 
     const node = document.createElement('div');
-    node.className = `seat-node${p ? '' : ' empty'}${p?.id === meId ? ' me' : ''}`;
+    node.className = `seat-node${p ? '' : ' empty'}${p?.id === meId ? ' me' : ''}${compact ? ' compact' : ''}`;
     node.style.left = `${point[0]}%`;
     node.style.top = `${point[1]}%`;
 
     if (!p) {
-      node.textContent = `${seat}号位 空位`;
+      node.textContent = compact ? `${seat}空位` : `${seat}号位 空位`;
       el.seatMap.appendChild(node);
       continue;
     }
@@ -438,10 +507,11 @@ function renderSeatMap() {
     const head = document.createElement('div');
     head.className = 'seat-head';
     const pos = posMap.get(p.id) || `S${seat}`;
-    head.textContent = `${p.name} · ${pos}`;
+    head.textContent = compact ? p.name : `${p.name} · ${pos}`;
 
     const badges = document.createElement('div');
     badges.className = 'badges';
+    if (compact) addBadge(badges, pos, 'gold');
     if (p.id === roomState.hostId) addBadge(badges, '房主', 'gold');
     if (roomState.game?.turnId === p.id && !roomState.game?.finished) addBadge(badges, '行动中', 'ok');
     if (p.ready) addBadge(badges, '已准备', 'ok');
@@ -451,11 +521,13 @@ function renderSeatMap() {
 
     const sub = document.createElement('div');
     sub.className = 'seat-sub';
-    sub.textContent = `后手 ${p.stack} · 本轮 ${p.betThisStreet} · 总投入 ${p.totalContribution}`;
+    sub.textContent = compact
+      ? `后手 ${p.stack} · 投入 ${p.totalContribution}`
+      : `后手 ${p.stack} · 本轮 ${p.betThisStreet} · 总投入 ${p.totalContribution}`;
 
     const act = document.createElement('div');
     act.className = 'seat-sub';
-    act.textContent = p.lastAction || '等待中';
+    act.textContent = compact ? (p.lastAction || '') : (p.lastAction || '等待中');
 
     const cards = document.createElement('div');
     cards.className = 'seat-cards';
@@ -470,7 +542,9 @@ function renderSeatMap() {
     node.appendChild(badges);
     node.appendChild(sub);
     node.appendChild(act);
-    node.appendChild(cards);
+    if (!compact || cards.children.length > 0) {
+      node.appendChild(cards);
+    }
 
     const admin = createAdminButtons(p.id);
     if (admin) node.appendChild(admin);
@@ -906,6 +980,10 @@ setInterval(() => {
     renderLobbyRooms();
   }
 }, 1000);
+
+window.addEventListener('resize', () => {
+  if (roomState) renderRoom();
+});
 
 loadName();
 socket.emit('listRooms');
