@@ -1582,19 +1582,33 @@ function renderActions() {
   el.straddleBox.classList.add('hidden');
 
   const canBetOrRaise = actionState.canBet || actionState.canRaise;
+  const hasToCall = actionState.toCall > 0;
+  const showCheck = actionState.canCheck && !hasToCall;
+  const showCall = actionState.canCall && hasToCall;
   const minTo = actionState.canBet ? actionState.minBetTo : actionState.minRaiseTo;
-  const minText = canBetOrRaise ? ` · 最小${actionState.canBet ? '下注' : '加注'}到 ${minTo}` : '';
-  el.actionInfo.textContent = `需跟注 ${actionState.toCall}${minText} · 最大到 ${actionState.maxTo}`;
-  el.actionMiniText.textContent = `跟 ${actionState.toCall}${canBetOrRaise ? ` / 最小 ${minTo}` : ''}`;
+
+  if (hasToCall) {
+    el.actionInfo.textContent = `当前需跟注 ${actionState.toCall}，你可以跟注 / 加注 / 弃牌`;
+    el.actionMiniText.textContent = `跟注 ${actionState.toCall}${canBetOrRaise ? ` / 最小加注到 ${minTo}` : ''}`;
+  } else {
+    el.actionInfo.textContent = `本轮尚无人下注，你可以过牌或下注`;
+    el.actionMiniText.textContent = canBetOrRaise ? `过牌 / 最小下注到 ${minTo}` : '可过牌';
+  }
   el.actionMiniText.classList.toggle('hidden', !uiActionPanelCollapsed);
 
   el.foldBtn.disabled = actionPending;
-  el.checkBtn.disabled = !(actionState.canCheck && actionState.toCall === 0) || actionPending;
-  el.callBtn.disabled = !(actionState.canCall && actionState.toCall > 0) || actionPending;
+  el.checkBtn.disabled = !showCheck || actionPending;
+  el.callBtn.disabled = !showCall || actionPending;
   el.allinBtn.disabled = actionState.maxTo <= 0 || actionPending;
-  el.callBtn.textContent = actionState.toCall > 0 ? `跟注 ${actionState.toCall}` : '跟注';
+  el.callBtn.textContent = showCall ? `跟注 ${actionState.toCall}` : '跟注';
+  el.checkBtn.classList.toggle('hidden', !showCheck);
+  el.callBtn.classList.toggle('hidden', !showCall);
+  el.betBtn.classList.toggle('hidden', !canBetOrRaise);
 
-  el.betBtn.textContent = actionState.canBet ? '下注到' : actionState.canRaise ? '加注到' : '下注/加注';
+  el.betBtn.textContent = actionState.canBet ? '下注' : actionState.canRaise ? '加注' : '下注/加注';
+  el.callBtn.classList.toggle('primary', showCall);
+  el.checkBtn.classList.toggle('primary', showCheck);
+  el.betBtn.classList.toggle('primary', !showCall);
   updateBetRange(actionState, el.betInput.value || minTo);
   el.betBtn.disabled = !canBetOrRaise || actionPending;
   renderQuickRaiseButtons(actionState);
