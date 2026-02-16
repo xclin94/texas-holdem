@@ -20,6 +20,8 @@ let uiSideCollapsed = localStorage.getItem('holdem_side_collapsed')
 let uiActionPanelCollapsed = localStorage.getItem('holdem_action_collapsed')
   ? localStorage.getItem('holdem_action_collapsed') === '1'
   : window.innerWidth <= 760;
+let uiMotionMode = localStorage.getItem('holdem_motion_mode') || 'full';
+let uiProfitFilter = localStorage.getItem('holdem_profit_filter') || 'all';
 let bannerTimer = null;
 let trackedHandNo = null;
 let trackedPhase = null;
@@ -79,6 +81,7 @@ const el = {
 
   themeToggleBtn: $('themeToggleBtn'),
   soundToggleBtn: $('soundToggleBtn'),
+  motionToggleBtn: $('motionToggleBtn'),
   sideToggleBtn: $('sideToggleBtn'),
   densityToggleBtn: $('densityToggleBtn'),
   focusMeBtn: $('focusMeBtn'),
@@ -113,6 +116,8 @@ const el = {
   statsList: $('statsList'),
   profitChart: $('profitChart'),
   profitLegend: $('profitLegend'),
+  profitFilterAllBtn: $('profitFilterAllBtn'),
+  profitFilterMeBtn: $('profitFilterMeBtn'),
   bannedList: $('bannedList'),
   historyList: $('historyList'),
   replayBox: $('replayBox'),
@@ -226,6 +231,16 @@ function refreshSoundButton() {
   el.soundToggleBtn.textContent = `提示音：${uiSoundEnabled ? '开' : '关'}`;
 }
 
+function applyMotionMode() {
+  if (uiMotionMode !== 'full' && uiMotionMode !== 'reduced') uiMotionMode = 'full';
+  document.body.dataset.motion = uiMotionMode;
+}
+
+function refreshMotionButton() {
+  if (!el.motionToggleBtn) return;
+  el.motionToggleBtn.textContent = `动效：${uiMotionMode === 'reduced' ? '节能' : '标准'}`;
+}
+
 function refreshSideButton() {
   if (!el.sideToggleBtn) return;
   el.sideToggleBtn.textContent = uiSideCollapsed ? '展开边栏' : '收起边栏';
@@ -244,6 +259,14 @@ function setSideCollapsed(next, persist = true) {
   applySideLayout();
 }
 
+function setActionPanelCollapsed(next, persist = true) {
+  uiActionPanelCollapsed = Boolean(next);
+  if (persist) {
+    localStorage.setItem('holdem_action_collapsed', uiActionPanelCollapsed ? '1' : '0');
+  }
+  applyActionPanelCollapsed();
+}
+
 function applySideLayout() {
   if (!el.tableGrid || !el.sidePanel) return;
   el.tableGrid.classList.toggle('side-collapsed', uiSideCollapsed);
@@ -255,6 +278,19 @@ function applyActionPanelCollapsed() {
   if (!el.actionPanel) return;
   el.actionPanel.classList.toggle('collapsed', uiActionPanelCollapsed);
   refreshActionPanelToggleButton();
+}
+
+function refreshProfitFilterButtons() {
+  if (!el.profitFilterAllBtn || !el.profitFilterMeBtn) return;
+  el.profitFilterAllBtn.classList.toggle('active', uiProfitFilter === 'all');
+  el.profitFilterMeBtn.classList.toggle('active', uiProfitFilter === 'me');
+}
+
+function setProfitFilter(next) {
+  uiProfitFilter = next === 'me' ? 'me' : 'all';
+  localStorage.setItem('holdem_profit_filter', uiProfitFilter);
+  refreshProfitFilterButtons();
+  renderProfitChart();
 }
 
 function bindMobileSwipeControls() {
@@ -296,15 +332,30 @@ function bindMobileSwipeControls() {
 
       const dx = t.clientX - swipeStart.x;
       const dy = t.clientY - swipeStart.y;
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
       swipeStart = null;
-      if (Math.abs(dx) < 70 || Math.abs(dy) > 45) return;
+      const actionVisible = !el.actionPanel.classList.contains('hidden');
 
-      if (dx < 0 && !uiSideCollapsed) {
-        setSideCollapsed(true, true);
-        showHandBanner('已收起边栏', 'info', 700);
-      } else if (dx > 0 && uiSideCollapsed) {
-        setSideCollapsed(false, true);
-        showHandBanner('已展开边栏', 'ok', 700);
+      if (absX >= 70 && absY <= 45) {
+        if (dx < 0 && !uiSideCollapsed) {
+          setSideCollapsed(true, true);
+          showHandBanner('已收起边栏', 'info', 700);
+        } else if (dx > 0 && uiSideCollapsed) {
+          setSideCollapsed(false, true);
+          showHandBanner('已展开边栏', 'ok', 700);
+        }
+        return;
+      }
+
+      if (absY >= 70 && absX <= 45 && actionVisible) {
+        if (dy > 0 && !uiActionPanelCollapsed) {
+          setActionPanelCollapsed(true, true);
+          showHandBanner('已收起操作区', 'info', 700);
+        } else if (dy < 0 && uiActionPanelCollapsed) {
+          setActionPanelCollapsed(false, true);
+          showHandBanner('已展开操作区', 'ok', 700);
+        }
       }
     },
     { passive: true },
@@ -935,6 +986,7 @@ function colorForSeries(i) {
 
 function renderProfitChart() {
   if (!el.profitChart || !el.profitLegend) return;
+  refreshProfitFilterButtons();
   const history = [...(roomState?.handHistory || [])].reverse();
   el.profitChart.innerHTML = '';
   el.profitLegend.innerHTML = '';
@@ -974,9 +1026,14 @@ function renderProfitChart() {
     });
   });
 
-  const series = [...seriesMap.values()].filter((s) => s.points.length >= 2);
-  if (!series.length) {
+  const fullSeries = [...seriesMap.values()].filter((s) => s.points.length >= 2);
+  if (!fullSeries.length) {
     el.profitLegend.textContent = '至少两手历史后显示曲线';
+    return;
+  }
+  const series = uiProfitFilter === 'me' ? fullSeries.filter((s) => s.playerId === meId) : fullSeries;
+  if (!series.length) {
+    el.profitLegend.textContent = '暂无你的净值曲线';
     return;
   }
 
@@ -1694,16 +1751,24 @@ el.soundToggleBtn.addEventListener('click', () => {
   if (uiSoundEnabled) playTurnCue();
 });
 
+el.motionToggleBtn.addEventListener('click', () => {
+  uiMotionMode = uiMotionMode === 'reduced' ? 'full' : 'reduced';
+  localStorage.setItem('holdem_motion_mode', uiMotionMode);
+  applyMotionMode();
+  refreshMotionButton();
+});
+
 el.sideToggleBtn.addEventListener('click', () => {
   setSideCollapsed(!uiSideCollapsed, true);
 });
 
 el.actionPanelToggleBtn.addEventListener('click', () => {
-  uiActionPanelCollapsed = !uiActionPanelCollapsed;
-  localStorage.setItem('holdem_action_collapsed', uiActionPanelCollapsed ? '1' : '0');
-  applyActionPanelCollapsed();
+  setActionPanelCollapsed(!uiActionPanelCollapsed, true);
   if (roomState) renderActions();
 });
+
+el.profitFilterAllBtn.addEventListener('click', () => setProfitFilter('all'));
+el.profitFilterMeBtn.addEventListener('click', () => setProfitFilter('me'));
 
 el.densityToggleBtn.addEventListener('click', () => {
   uiSeatDensity = uiSeatDensity === 'compact' ? 'auto' : 'compact';
@@ -1718,7 +1783,7 @@ el.focusMeBtn.addEventListener('click', () => {
   mine.classList.remove('spotlight');
   void mine.offsetWidth;
   mine.classList.add('spotlight');
-  mine.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+  mine.scrollIntoView({ behavior: uiMotionMode === 'reduced' ? 'auto' : 'smooth', block: 'center', inline: 'center' });
 });
 
 el.takeSeatBtn.addEventListener('click', () => socket.emit('takeSeat'));
@@ -1836,11 +1901,15 @@ window.addEventListener('resize', () => {
 bindMobileSwipeControls();
 loadName();
 applyTheme();
+applyMotionMode();
 refreshPendingButtons();
 refreshThemeButton();
 refreshSoundButton();
+refreshMotionButton();
 refreshDensityButton();
 refreshActionPanelToggleButton();
+if (uiProfitFilter !== 'me' && uiProfitFilter !== 'all') uiProfitFilter = 'all';
+refreshProfitFilterButtons();
 applySideLayout();
 applyActionPanelCollapsed();
 (() => {

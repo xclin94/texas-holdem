@@ -56,6 +56,20 @@ body[data-theme='sunset'] {
   --felt-2: rgba(68, 24, 14, 0.95);
 }
 
+body[data-motion='reduced'] .seat-node,
+body[data-motion='reduced'] .card-face,
+body[data-motion='reduced'] .hand-banner,
+body[data-motion='reduced'] .btn {
+  transition: none !important;
+}
+
+body[data-motion='reduced'] .seat-node.turn,
+body[data-motion='reduced'] .seat-node.spotlight,
+body[data-motion='reduced'] .card-face.deal-in,
+body[data-motion='reduced'] .card-face.deal-seat {
+  animation: none !important;
+}
+
 .app-bg {
   position: fixed;
   inset: 0;
@@ -987,6 +1001,21 @@ input[type='checkbox'] {
   padding: 8px;
 }
 
+.chart-filter {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+
+.chart-filter .btn {
+  padding: 4px 8px;
+}
+
+.chart-filter .btn.active {
+  border-color: rgba(232, 187, 97, 0.55);
+  background: rgba(232, 187, 97, 0.2);
+}
+
 .profit-chart {
   width: 100%;
   height: 170px;
@@ -1395,6 +1424,10 @@ input[type='checkbox'] {
 
   .quick-raise {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chart-filter .btn {
+    flex: 1 1 0;
   }
 
   .result-winner {

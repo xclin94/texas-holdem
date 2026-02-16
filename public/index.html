@@ -149,6 +149,7 @@
           <div class="actions">
             <button id="themeToggleBtn" class="btn ghost">主题：森林</button>
             <button id="soundToggleBtn" class="btn ghost">提示音：开</button>
+            <button id="motionToggleBtn" class="btn ghost">动效：标准</button>
             <button id="sideToggleBtn" class="btn ghost">收起边栏</button>
             <button id="densityToggleBtn" class="btn ghost">紧凑视图</button>
             <button id="focusMeBtn" class="btn ghost">定位我的座位</button>
@@ -331,6 +332,10 @@
 
             <h3>净值曲线</h3>
             <div class="chart-wrap">
+              <div class="chart-filter">
+                <button id="profitFilterAllBtn" class="btn tiny">全部玩家</button>
+                <button id="profitFilterMeBtn" class="btn tiny">仅看我</button>
+              </div>
               <svg id="profitChart" class="profit-chart" viewBox="0 0 360 170" preserveAspectRatio="none"></svg>
               <div id="profitLegend" class="profit-legend"></div>
             </div>
