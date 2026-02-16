@@ -67,7 +67,8 @@ body[data-motion='reduced'] .btn {
 body[data-motion='reduced'] .seat-node.turn,
 body[data-motion='reduced'] .seat-node.spotlight,
 body[data-motion='reduced'] .card-face.deal-in,
-body[data-motion='reduced'] .card-face.deal-seat {
+body[data-motion='reduced'] .card-face.deal-seat,
+body[data-motion='reduced'] .seat-bet-chip.active {
   animation: none !important;
 }
 
@@ -718,6 +719,18 @@ input[type='checkbox'] {
   animation: seatSpotlight 1s ease;
 }
 
+.seat-node.seat-dealer {
+  border-left: 3px solid rgba(240, 191, 94, 0.95);
+}
+
+.seat-node.seat-sb {
+  border-top: 3px solid rgba(126, 211, 255, 0.95);
+}
+
+.seat-node.seat-bb {
+  border-bottom: 3px solid rgba(255, 149, 126, 0.95);
+}
+
 .seat-map.seat-pick-mode .seat-node.seat-selectable {
   cursor: pointer;
   border-color: rgba(232, 187, 97, 0.78);
@@ -928,6 +941,7 @@ input[type='checkbox'] {
   background: linear-gradient(140deg, rgba(232, 187, 97, 0.86), rgba(255, 227, 152, 0.88));
   color: #1c1409;
   box-shadow: 0 0 0 1px rgba(255, 236, 190, 0.3);
+  animation: streetBetPulse 1.2s ease-in-out infinite;
 }
 
 .seat-node.compact .seat-bet-chip {
@@ -940,6 +954,10 @@ input[type='checkbox'] {
 .seat-node.dense .seat-bet-chip {
   font-size: 9px;
   padding: 1px 5px;
+}
+
+#streetBetTotalText {
+  color: #ffe8b4;
 }
 
 .action-panel,
@@ -1243,6 +1261,16 @@ input[type='checkbox'] {
   }
   100% {
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes streetBetPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px rgba(255, 236, 190, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(255, 236, 190, 0.4);
   }
 }
 

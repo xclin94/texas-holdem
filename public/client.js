@@ -105,6 +105,7 @@ const el = {
   potText: $('potText'),
   potHeroText: $('potHeroText'),
   betText: $('betText'),
+  streetBetTotalText: $('streetBetTotalText'),
   betHeroText: $('betHeroText'),
   myStackText: $('myStackText'),
   turnText: $('turnText'),
@@ -1191,6 +1192,9 @@ function renderSeatMap() {
     head.className = 'seat-head';
     const pos = posMap.get(p.id) || `S${seat}`;
     head.textContent = compact ? p.name : `${p.name} · ${pos}`;
+    if (roomState.game?.dealerId === p.id) node.classList.add('seat-dealer');
+    if (roomState.game?.smallBlindId === p.id) node.classList.add('seat-sb');
+    if (roomState.game?.bigBlindId === p.id) node.classList.add('seat-bb');
 
     const badges = document.createElement('div');
     badges.className = 'badges';
@@ -1938,9 +1942,11 @@ function renderStatus() {
   el.handTypeText.textContent = roomState?.myHandName || '-';
   const potTotal = g?.potTotal || 0;
   const currentBet = g?.currentBet || 0;
+  const streetBetTotal = (roomState?.players || []).reduce((sum, p) => sum + Math.max(0, Number(p.betThisStreet) || 0), 0);
   el.potText.textContent = String(potTotal);
   el.potHeroText.textContent = String(potTotal);
   el.betText.textContent = String(currentBet);
+  if (el.streetBetTotalText) el.streetBetTotalText.textContent = String(streetBetTotal);
   el.betHeroText.textContent = String(currentBet);
   el.turnText.textContent = roomMemberName(g?.turnId) || '-';
 
