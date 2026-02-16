@@ -170,7 +170,9 @@ const THEME_LABEL = {
 const quickRaiseLabelMap = {
   '0.33': '1/3池',
   '0.5': '1/2池',
+  '0.75': '3/4池',
   '1': '1池',
+  '1.5': '1.5池',
   '2': '2池',
 };
 const MOBILE_SEAT_LAYOUTS = {
@@ -233,6 +235,29 @@ const MOBILE_SEAT_LAYOUTS = {
     [12, 38],
     [8, 63],
     [22, 81],
+  ],
+};
+const NARROW_MOBILE_SEAT_LAYOUTS = {
+  8: [
+    [50, 89],
+    [80, 79],
+    [92, 54],
+    [78, 29],
+    [50, 17],
+    [22, 29],
+    [8, 54],
+    [20, 79],
+  ],
+  9: [
+    [50, 89],
+    [78, 82],
+    [92, 66],
+    [90, 41],
+    [68, 22],
+    [32, 22],
+    [10, 41],
+    [8, 66],
+    [22, 82],
   ],
 };
 
@@ -784,8 +809,23 @@ function isMobileView() {
   return window.innerWidth <= 760;
 }
 
+function isNarrowMobileView() {
+  return window.innerWidth <= 420;
+}
+
+function compactStackText(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '-';
+  if (n >= 1000000) return `${(n / 1000000).toFixed(n >= 10000000 ? 0 : 1)}m`;
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
+  return String(Math.max(0, Math.floor(n)));
+}
+
 function getSeatLayout(maxPlayers, compact) {
   const count = clampInt(maxPlayers, 2, 9);
+  if (compact && isNarrowMobileView() && NARROW_MOBILE_SEAT_LAYOUTS[count]) {
+    return NARROW_MOBILE_SEAT_LAYOUTS[count].map((p) => [p[0], p[1]]);
+  }
   if (compact && MOBILE_SEAT_LAYOUTS[count]) {
     return MOBILE_SEAT_LAYOUTS[count].map((p) => [p[0], p[1]]);
   }
@@ -805,13 +845,23 @@ function getSeatLayout(maxPlayers, compact) {
 function seatNodePreset(maxPlayers, compact) {
   const n = clampInt(maxPlayers, 2, 9);
   const forceCompact = uiSeatDensity === 'compact';
+  const narrowMobile = compact && isNarrowMobileView();
   if (compact) {
-    if (forceCompact) return { width: 72, height: 54, compact: true, dense: true };
-    if (n >= 9) return { width: 72, height: 54, compact: true, dense: true };
-    if (n >= 8) return { width: 76, height: 56, compact: true, dense: true };
-    if (n >= 7) return { width: 82, height: 60, compact: true, dense: true };
-    if (n >= 6) return { width: 88, height: 62, compact: true, dense: false };
-    return { width: 100, height: 70, compact: true, dense: false };
+    let base;
+    if (forceCompact) base = { width: 72, height: 54, compact: true, dense: true };
+    else if (n >= 9) base = { width: 72, height: 54, compact: true, dense: true };
+    else if (n >= 8) base = { width: 76, height: 56, compact: true, dense: true };
+    else if (n >= 7) base = { width: 82, height: 60, compact: true, dense: true };
+    else if (n >= 6) base = { width: 88, height: 62, compact: true, dense: false };
+    else base = { width: 100, height: 70, compact: true, dense: false };
+
+    if (!narrowMobile) return base;
+    return {
+      ...base,
+      width: Math.max(64, base.width - 8),
+      height: Math.max(48, base.height - 6),
+      dense: true,
+    };
   }
   if (forceCompact) return { width: 118, height: 84, compact: false, dense: true };
   if (n >= 8) return { width: 124, height: 88, compact: false, dense: true };
@@ -871,6 +921,7 @@ function renderSeatMap() {
   const maxPlayers = roomState?.settings?.maxPlayers || 9;
   const handNo = roomState?.game?.handNo || null;
   const compact = isMobileView();
+  const narrowMobile = compact && isNarrowMobileView();
   const layout = getSeatLayout(maxPlayers, compact);
   const posMap = buildPositionLabelMap();
   const preset = seatNodePreset(maxPlayers, compact);
@@ -879,7 +930,9 @@ function renderSeatMap() {
   if (el.tableCanvas) {
     const minHeight = compact
       ? maxPlayers >= 8
-        ? 760
+        ? narrowMobile
+          ? 800
+          : 760
         : 640
       : maxPlayers >= 8
         ? 800
@@ -894,10 +947,12 @@ function renderSeatMap() {
 
     const node = document.createElement('div');
     node.className = `seat-node${p ? '' : ' empty'}${p?.id === meId ? ' me' : ''}${isTurn ? ' turn' : ''}${preset.compact ? ' compact' : ''}${preset.dense ? ' dense' : ''}`;
+    const emptyMinWidth = narrowMobile ? 56 : 68;
+    const emptyMinHeight = narrowMobile ? 30 : 34;
     node.style.left = `${point[0]}%`;
     node.style.top = `${point[1]}%`;
-    node.style.width = `${p ? preset.width : Math.max(68, Math.floor(preset.width * 0.66))}px`;
-    node.style.minHeight = `${p ? preset.height : Math.max(34, Math.floor(preset.height * 0.5))}px`;
+    node.style.width = `${p ? preset.width : Math.max(emptyMinWidth, Math.floor(preset.width * 0.66))}px`;
+    node.style.minHeight = `${p ? preset.height : Math.max(emptyMinHeight, Math.floor(preset.height * 0.5))}px`;
     node.style.zIndex = String((p?.id === meId ? 40 : 20) + Math.floor(point[1] / 10));
 
     if (!p) {
@@ -929,8 +984,9 @@ function renderSeatMap() {
     const sub = document.createElement('div');
     sub.className = 'seat-sub';
     if (compact) {
-      const action = p.lastAction ? ` · ${p.lastAction}` : '';
-      sub.textContent = `后手 ${p.stack}${action}`;
+      const stackText = compactStackText(p.stack);
+      const action = !narrowMobile && p.lastAction ? ` · ${p.lastAction}` : '';
+      sub.textContent = `后手 ${stackText}${action}`;
     } else {
       sub.textContent = `后手 ${p.stack} · 本轮 ${p.betThisStreet} · 总投入 ${p.totalContribution}`;
     }
@@ -1289,9 +1345,12 @@ function renderResult() {
     .join('<br/>');
   const canContinue = Boolean(roomState?.canStart);
   const autoStartSec = roomState?.autoStartAt ? Math.max(0, Math.ceil((roomState.autoStartAt - Date.now()) / 1000)) : 0;
+  const autoStartDelayMs = Math.max(800, Number(roomState?.autoStartDelayMs || 2200));
+  const autoStartRemainMs = roomState?.autoStartAt ? Math.max(0, roomState.autoStartAt - Date.now()) : 0;
+  const autoStartPct = Math.max(0, Math.min(100, Math.round((autoStartRemainMs / autoStartDelayMs) * 100)));
   const iAmHost = roomState?.hostId === meId;
   const cta = autoStartSec > 0
-    ? `<p class="hint">下一手将在 ${autoStartSec}s 后自动开始</p>`
+    ? `<div class="auto-next"><p class="hint">下一手将在 ${autoStartSec}s 后自动开始</p><div class="auto-next-bar"><i style="width:${autoStartPct}%"></i></div></div>`
     : canContinue
       ? iAmHost
         ? '<button id="nextHandBtn" class="btn primary">立即开始下一手</button>'

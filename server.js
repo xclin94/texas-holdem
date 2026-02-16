@@ -1400,6 +1400,7 @@ function serializeRoom(room, viewerId) {
     sessionExpired: roomIsExpired(room),
     sessionRemainSec: secondsLeft(room.sessionEndsAt),
     autoStartAt: room.autoStartAt || null,
+    autoStartDelayMs: AUTO_NEXT_HAND_DELAY_MS,
     players,
     spectators,
     logs: room.logs.slice(-80),
