@@ -851,7 +851,7 @@ io.on('connection', (socket) => {
     emitLobby();
   });
 
-  socket.on('partyStart', () => {
+  socket.on('partyStart', (payload = {}) => {
     const room = findRoomOfSocket(socket);
     if (!room) return;
 
@@ -870,6 +870,7 @@ io.on('connection', (socket) => {
       return;
     }
 
+    room.setup = normalizeSetup(payload, room.setup);
     startGame(room);
   });
 

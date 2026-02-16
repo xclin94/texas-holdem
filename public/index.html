@@ -728,6 +728,10 @@
         };
       }
 
+      function currentSetupFromInputs() {
+        return clampSetupForSend(gameSelect.value, roundsInput.value, secondsInput.value);
+      }
+
       function renderScoreboard(room) {
         scoreboard.innerHTML = '';
         const list = [...room.players].sort((a, b) => b.score - a.score);
@@ -1119,12 +1123,13 @@
 
       function saveSetup() {
         if (!roomState || !roomState.room) return;
-        const send = clampSetupForSend(gameSelect.value, roundsInput.value, secondsInput.value);
+        const send = currentSetupFromInputs();
         socket.emit('partyUpdateSetup', send);
       }
 
       function startGame() {
-        socket.emit('partyStart');
+        const send = currentSetupFromInputs();
+        socket.emit('partyStart', send);
       }
 
       function backToRoomLobby() {
