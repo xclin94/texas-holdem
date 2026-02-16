@@ -26,7 +26,7 @@
         <div class="grid lobby-grid">
           <article class="card create-card">
             <h2>创建房间</h2>
-            <div class="field-row create-row-two">
+            <div class="create-grid-basic">
               <label>
                 你的昵称
                 <input id="nameInput" maxlength="16" placeholder="例如 Alice" />
@@ -35,9 +35,6 @@
                 房间名
                 <input id="createRoomNameInput" maxlength="24" placeholder="好友局" />
               </label>
-            </div>
-
-            <div class="field-row create-row-two">
               <label>
                 房间密码（可选）
                 <input id="createPasswordInput" maxlength="24" placeholder="留空无密码" />
@@ -48,48 +45,50 @@
               </label>
             </div>
 
-            <h3>玩法配置</h3>
-            <div class="field-row create-row-quad">
-              <label>
-                起始筹码
-                <input id="createStackInput" type="number" min="200" max="500000" value="2000" />
-              </label>
-              <label>
-                小盲
-                <input id="createSbInput" type="number" min="1" max="50000" value="10" />
-              </label>
-              <label>
-                大盲
-                <input id="createBbInput" type="number" min="2" max="100000" value="20" />
-              </label>
-              <label>
-                最大人数
-                <input id="createMaxPlayersInput" type="number" min="2" max="9" value="9" />
-              </label>
-            </div>
+            <details class="create-advanced" open>
+              <summary>高级玩法设置</summary>
+              <div class="create-grid-advanced">
+                <label>
+                  起始筹码
+                  <input id="createStackInput" type="number" min="200" max="500000" value="2000" />
+                </label>
+                <label>
+                  小盲
+                  <input id="createSbInput" type="number" min="1" max="50000" value="10" />
+                </label>
+                <label>
+                  大盲
+                  <input id="createBbInput" type="number" min="2" max="100000" value="20" />
+                </label>
+                <label>
+                  最大人数
+                  <input id="createMaxPlayersInput" type="number" min="2" max="9" value="9" />
+                </label>
+                <label>
+                  每手行动时限（秒）
+                  <input id="createTurnInput" type="number" min="8" max="90" value="25" />
+                </label>
+                <label>
+                  盲注升级间隔（分钟）
+                  <input id="createBlindIntervalInput" type="number" min="1" max="120" value="15" />
+                </label>
+              </div>
 
-            <div class="field-row create-row-mix">
-              <label>
-                每手行动时限（秒）
-                <input id="createTurnInput" type="number" min="8" max="90" value="25" />
-              </label>
-              <label>
-                盲注升级间隔（分钟）
-                <input id="createBlindIntervalInput" type="number" min="1" max="120" value="15" />
-              </label>
-              <label class="check">
-                <input id="createTournamentInput" type="checkbox" />
-                锦标赛模式（盲注自动增长）
-              </label>
-              <label class="check">
-                <input id="createStraddleInput" type="checkbox" checked />
-                允许 straddle
-              </label>
-              <label class="check">
-                <input id="createSpectatorInput" type="checkbox" checked />
-                允许观战
-              </label>
-            </div>
+              <div class="create-toggle-grid">
+                <label class="check">
+                  <input id="createTournamentInput" type="checkbox" />
+                  锦标赛模式（盲注自动增长）
+                </label>
+                <label class="check">
+                  <input id="createStraddleInput" type="checkbox" checked />
+                  允许 straddle
+                </label>
+                <label class="check">
+                  <input id="createSpectatorInput" type="checkbox" checked />
+                  允许观战
+                </label>
+              </div>
+            </details>
 
             <button id="createBtn" class="btn primary">创建房间</button>
           </article>
