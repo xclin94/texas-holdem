@@ -33,10 +33,10 @@ npm start
 
 默认地址：`http://localhost:3000/`
 
-可通过环境变量指定端口：
+默认启动固定使用 `3000` 端口。若要临时改端口，可直接运行：
 
 ```bash
-HOLDEM_PORT=4000 npm start
+HOLDEM_PORT=4000 node server.js
 ```
 
 ## 联机
