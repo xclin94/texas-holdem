@@ -61,7 +61,7 @@ const el = {
   nextBlindText: $('nextBlindText'),
 
   communityCards: $('communityCards'),
-  playersList: $('playersList'),
+  seatMap: $('seatMap'),
   spectatorsList: $('spectatorsList'),
   bannedList: $('bannedList'),
   historyList: $('historyList'),
@@ -301,41 +301,164 @@ function createAdminButtons(targetId) {
   return box;
 }
 
-function renderPlayers() {
-  el.playersList.innerHTML = '';
+function getSeatLayout(maxPlayers) {
+  const layouts = {
+    2: [
+      [50, 85],
+      [50, 15],
+    ],
+    3: [
+      [50, 86],
+      [80, 58],
+      [20, 58],
+    ],
+    4: [
+      [50, 86],
+      [84, 52],
+      [50, 14],
+      [16, 52],
+    ],
+    5: [
+      [50, 87],
+      [82, 66],
+      [72, 18],
+      [28, 18],
+      [18, 66],
+    ],
+    6: [
+      [50, 87],
+      [80, 68],
+      [80, 34],
+      [50, 14],
+      [20, 34],
+      [20, 68],
+    ],
+    7: [
+      [50, 87],
+      [78, 72],
+      [86, 48],
+      [70, 16],
+      [30, 16],
+      [14, 48],
+      [22, 72],
+    ],
+    8: [
+      [50, 88],
+      [72, 78],
+      [86, 60],
+      [86, 30],
+      [72, 12],
+      [28, 12],
+      [14, 30],
+      [14, 60],
+    ],
+    9: [
+      [50, 88],
+      [74, 80],
+      [88, 60],
+      [88, 34],
+      [74, 12],
+      [50, 8],
+      [26, 12],
+      [12, 34],
+      [12, 60],
+    ],
+  };
+  return layouts[maxPlayers] || layouts[9];
+}
 
-  (roomState?.players || []).forEach((p) => {
-    const card = document.createElement('div');
-    card.className = `player${p.id === meId ? ' me' : ''}`;
+function labelsForCount(count) {
+  if (count <= 0) return [];
+  const map = {
+    1: ['UTG'],
+    2: ['UTG', 'CO'],
+    3: ['UTG', 'HJ', 'CO'],
+    4: ['UTG', 'LJ', 'HJ', 'CO'],
+    5: ['UTG', 'UTG+1', 'LJ', 'HJ', 'CO'],
+    6: ['UTG', 'UTG+1', 'MP', 'LJ', 'HJ', 'CO'],
+  };
+  return map[count] || Array.from({ length: count }, (_, i) => `P${i + 1}`);
+}
 
-    const name = document.createElement('div');
-    name.className = 'name';
-    name.textContent = `${p.name} · ${p.seat}号位`;
+function buildPositionLabelMap() {
+  const map = new Map();
+  const game = roomState?.game;
+  if (!game || !game.order?.length) return map;
+
+  const order = game.order;
+  const n = order.length;
+
+  if (n === 2) {
+    map.set(game.dealerId, 'BTN/SB');
+    map.set(game.bigBlindId, 'BB');
+    return map;
+  }
+
+  map.set(game.dealerId, 'BTN');
+  map.set(game.smallBlindId, 'SB');
+  map.set(game.bigBlindId, 'BB');
+
+  const bbIdx = order.indexOf(game.bigBlindId);
+  const seq = [];
+  let idx = bbIdx;
+  for (let i = 0; i < n; i += 1) {
+    idx = (idx + 1) % n;
+    const id = order[idx];
+    if (id === game.dealerId || id === game.smallBlindId || id === game.bigBlindId) continue;
+    seq.push(id);
+  }
+
+  const labels = labelsForCount(seq.length);
+  seq.forEach((id, i) => map.set(id, labels[i] || `P${i + 1}`));
+  return map;
+}
+
+function renderSeatMap() {
+  el.seatMap.innerHTML = '';
+  const players = roomState?.players || [];
+  const maxPlayers = roomState?.settings?.maxPlayers || 9;
+  const layout = getSeatLayout(maxPlayers);
+  const posMap = buildPositionLabelMap();
+
+  for (let seat = 1; seat <= maxPlayers; seat += 1) {
+    const point = layout[seat - 1] || [50, 50];
+    const p = players.find((x) => x.seat === seat);
+
+    const node = document.createElement('div');
+    node.className = `seat-node${p ? '' : ' empty'}${p?.id === meId ? ' me' : ''}`;
+    node.style.left = `${point[0]}%`;
+    node.style.top = `${point[1]}%`;
+
+    if (!p) {
+      node.textContent = `${seat}号位 空位`;
+      el.seatMap.appendChild(node);
+      continue;
+    }
+
+    const head = document.createElement('div');
+    head.className = 'seat-head';
+    const pos = posMap.get(p.id) || `S${seat}`;
+    head.textContent = `${p.name} · ${pos}`;
 
     const badges = document.createElement('div');
     badges.className = 'badges';
-
     if (p.id === roomState.hostId) addBadge(badges, '房主', 'gold');
-    if (roomState.game?.dealerId === p.id) addBadge(badges, '庄', 'gold');
-    if (roomState.game?.smallBlindId === p.id) addBadge(badges, 'SB');
-    if (roomState.game?.bigBlindId === p.id) addBadge(badges, 'BB');
     if (roomState.game?.turnId === p.id && !roomState.game?.finished) addBadge(badges, '行动中', 'ok');
     if (p.ready) addBadge(badges, '已准备', 'ok');
-    if (p.folded) addBadge(badges, '已弃牌', 'warn');
+    if (p.folded) addBadge(badges, '弃牌', 'warn');
     if (p.allIn) addBadge(badges, '全下');
     if (!p.connected) addBadge(badges, '离线', 'warn');
 
-    const chips = document.createElement('div');
-    chips.className = 'hint';
-    chips.textContent = `筹码 ${p.stack} · 本轮 ${p.betThisStreet} · 总投入 ${p.totalContribution}`;
+    const sub = document.createElement('div');
+    sub.className = 'seat-sub';
+    sub.textContent = `后手 ${p.stack} · 本轮 ${p.betThisStreet} · 总投入 ${p.totalContribution}`;
 
-    const action = document.createElement('div');
-    action.className = 'hint';
-    action.textContent = p.lastAction || '等待中';
+    const act = document.createElement('div');
+    act.className = 'seat-sub';
+    act.textContent = p.lastAction || '等待中';
 
     const cards = document.createElement('div');
-    cards.className = 'cards';
-
+    cards.className = 'seat-cards';
     if (p.holeCards?.length) {
       p.holeCards.forEach((c) => cards.appendChild(cardNode(c)));
     } else if (p.inHand && !roomState.game?.finished) {
@@ -343,17 +466,17 @@ function renderPlayers() {
       cards.appendChild(cardNode('XX', true));
     }
 
-    card.appendChild(name);
-    card.appendChild(badges);
-    card.appendChild(chips);
-    card.appendChild(action);
-    card.appendChild(cards);
+    node.appendChild(head);
+    node.appendChild(badges);
+    node.appendChild(sub);
+    node.appendChild(act);
+    node.appendChild(cards);
 
     const admin = createAdminButtons(p.id);
-    if (admin) card.appendChild(admin);
+    if (admin) node.appendChild(admin);
 
-    el.playersList.appendChild(card);
-  });
+    el.seatMap.appendChild(node);
+  }
 }
 
 function renderSpectators() {
@@ -618,7 +741,7 @@ function renderRoom() {
   if (!roomState) return;
   renderStatus();
   renderCommunity();
-  renderPlayers();
+  renderSeatMap();
   renderSpectators();
   renderBanned();
   renderHistory();
