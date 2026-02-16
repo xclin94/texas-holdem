@@ -5,7 +5,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "game3200": "HOLDEM_PORT=3200 node server.js"
   },
   "keywords": [],
   "author": "",

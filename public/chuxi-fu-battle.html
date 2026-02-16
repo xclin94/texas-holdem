@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>福运连连 · 除夕传手机</title>
+    <style>
+      :root {
+        --bg-1: #2c0909;
+        --bg-2: #5a0f10;
+        --card: rgba(255, 245, 229, 0.1);
+        --card-strong: rgba(255, 245, 229, 0.16);
+        --line: rgba(255, 220, 150, 0.28);
+        --text: #fff8ea;
+        --muted: #f9ddb3;
+        --accent: #ffd447;
+        --accent-2: #ff9a2d;
+        --danger: #ffc7c7;
+        --ok: #cbffd6;
+        --radius: 18px;
+        --shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+      }
+
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        min-height: 100%;
+        font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: radial-gradient(circle at 15% 10%, #8f1d16 0%, transparent 38%),
+          radial-gradient(circle at 90% 5%, #a93519 0%, transparent 30%),
+          linear-gradient(170deg, var(--bg-1), var(--bg-2));
+        color: var(--text);
+        user-select: none;
+      }
+
+      body {
+        display: flex;
+        justify-content: center;
+        padding: max(16px, env(safe-area-inset-top)) 12px max(24px, env(safe-area-inset-bottom));
+      }
+
+      .app {
+        width: min(560px, 100%);
+        display: grid;
+        gap: 14px;
+      }
+
+      .panel {
+        border-radius: var(--radius);
+        border: 1px solid var(--line);
+        background: linear-gradient(155deg, var(--card-strong), var(--card));
+        box-shadow: var(--shadow);
+        padding: 16px;
+      }
+
+      .title {
+        display: grid;
+        gap: 8px;
+        text-align: center;
+      }
+
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: clamp(26px, 7vw, 36px);
+        letter-spacing: 1px;
+      }
+
+      .subtitle {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .rules {
+        color: var(--muted);
+        line-height: 1.5;
+        font-size: 14px;
+      }
+
+      .input-wrap {
+        display: grid;
+        gap: 10px;
+      }
+
+      label {
+        display: grid;
+        gap: 8px;
+        font-weight: 700;
+        font-size: 13px;
+        color: #ffe4bf;
+      }
+
+      textarea,
+      input {
+        width: 100%;
+        border: 1px solid rgba(255, 224, 167, 0.35);
+        border-radius: 12px;
+        background: rgba(0, 0, 0, 0.2);
+        color: var(--text);
+        padding: 10px 12px;
+        font-size: 16px;
+        outline: none;
+      }
+
+      textarea {
+        min-height: 92px;
+        resize: vertical;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .btn {
+        border: 0;
+        border-radius: 12px;
+        background: linear-gradient(120deg, #ffde6a, #ffab2c);
+        color: #5f1604;
+        font-weight: 800;
+        font-size: 16px;
+        padding: 12px 14px;
+        cursor: pointer;
+      }
+
+      .btn.secondary {
+        background: rgba(255, 241, 213, 0.14);
+        border: 1px solid var(--line);
+        color: #ffeaca;
+      }
+
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      .status {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        color: #ffe6b5;
+        font-size: 14px;
+      }
+
+      .focus {
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .scoreboard {
+        display: grid;
+        gap: 8px;
+      }
+
+      .score-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 214, 137, 0.24);
+        background: rgba(0, 0, 0, 0.22);
+      }
+
+      .score-item.active {
+        border-color: rgba(255, 235, 169, 0.85);
+        box-shadow: 0 0 0 1px rgba(255, 235, 169, 0.5) inset;
+      }
+
+      .score-item .name {
+        font-weight: 700;
+      }
+
+      .score-item .meta {
+        color: #ffe0b5;
+        font-size: 12px;
+      }
+
+      .board {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .tile {
+        border: 1px solid rgba(255, 232, 181, 0.35);
+        border-radius: 12px;
+        aspect-ratio: 1;
+        display: grid;
+        place-items: center;
+        color: #fff9ea;
+        font-size: clamp(30px, 10vw, 44px);
+        font-weight: 800;
+        background: linear-gradient(155deg, rgba(255, 205, 123, 0.2), rgba(105, 11, 11, 0.26));
+        transition: transform 0.08s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+      }
+
+      .tile:active {
+        transform: scale(0.95);
+      }
+
+      .tile.target {
+        border-color: rgba(255, 240, 190, 0.82);
+      }
+
+      .tile.golden {
+        background: linear-gradient(145deg, rgba(255, 249, 157, 0.9), rgba(255, 193, 66, 0.85));
+        color: #7a1a07;
+        box-shadow: 0 0 18px rgba(255, 205, 95, 0.5);
+      }
+
+      .feedback {
+        min-height: 22px;
+        text-align: center;
+        font-weight: 700;
+      }
+
+      .feedback.ok {
+        color: var(--ok);
+      }
+
+      .feedback.bad {
+        color: var(--danger);
+      }
+
+      .overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(26, 5, 5, 0.82);
+        backdrop-filter: blur(2px);
+        display: grid;
+        place-items: center;
+        padding: 18px;
+        z-index: 5;
+      }
+
+      .overlay-card {
+        width: min(430px, 100%);
+        text-align: center;
+        display: grid;
+        gap: 12px;
+      }
+
+      .overlay-card p {
+        color: #ffe2bd;
+        line-height: 1.5;
+      }
+
+      .result-title {
+        text-align: center;
+        margin-bottom: 12px;
+      }
+
+      .result-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .result-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 221, 159, 0.28);
+        padding: 10px 12px;
+        background: rgba(0, 0, 0, 0.2);
+      }
+
+      .result-item.top {
+        border-color: rgba(255, 230, 140, 0.95);
+        box-shadow: 0 0 0 1px rgba(255, 220, 130, 0.5) inset;
+      }
+
+      .footer-note {
+        text-align: center;
+        color: #ffd9a9;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <section id="setupPanel" class="panel">
+        <header class="title">
+          <h1>福运连连</h1>
+          <p class="subtitle">除夕传手机挑战 · 2-12 人</p>
+        </header>
+        <div class="rules">
+          玩法：每人轮流拿手机，在倒计时内尽可能点中“福”字。点错会扣分并断连击，金色“福”额外加分。打完全部回合后按总分排行。
+        </div>
+        <div class="input-wrap">
+          <label>
+            玩家名单（每行一个）
+            <textarea id="playersInput" placeholder="例如：\n小王\n阿琳\n外婆"></textarea>
+          </label>
+          <div class="row">
+            <label>
+              每人时长（秒）
+              <input id="turnSecondsInput" type="number" min="8" max="45" value="15" />
+            </label>
+            <label>
+              回合数
+              <input id="roundCountInput" type="number" min="1" max="6" value="2" />
+            </label>
+          </div>
+          <button id="startBtn" class="btn">开始游戏</button>
+        </div>
+      </section>
+
+      <section id="gamePanel" class="panel hidden">
+        <div class="status">
+          <span id="roundText">第 1 / 2 回合</span>
+          <span id="timerText">剩余 15 秒</span>
+        </div>
+        <p id="focusText" class="focus">当前玩家：-</p>
+        <div id="scoreboard" class="scoreboard"></div>
+        <div id="board" class="board"></div>
+        <p id="feedback" class="feedback"></p>
+      </section>
+
+      <section id="resultPanel" class="panel hidden">
+        <h2 class="result-title">新春排行榜</h2>
+        <div id="resultList" class="result-list"></div>
+        <div class="row" style="margin-top: 10px">
+          <button id="restartBtn" class="btn">再来一局</button>
+          <button id="backSetupBtn" class="btn secondary">修改配置</button>
+        </div>
+      </section>
+
+      <p class="footer-note">提示：把页面发到群里，大家用同一个房主手机轮流玩最热闹。</p>
+    </main>
+
+    <div id="turnOverlay" class="overlay hidden">
+      <div class="panel overlay-card">
+        <h2 id="overlayTitle">准备开始</h2>
+        <p id="overlayDesc">请把手机交给下一位玩家。</p>
+        <button id="overlayBtn" class="btn">开始本回合</button>
+      </div>
+    </div>
+
+    <script>
+      const setupPanel = document.getElementById('setupPanel');
+      const gamePanel = document.getElementById('gamePanel');
+      const resultPanel = document.getElementById('resultPanel');
+      const playersInput = document.getElementById('playersInput');
+      const turnSecondsInput = document.getElementById('turnSecondsInput');
+      const roundCountInput = document.getElementById('roundCountInput');
+      const startBtn = document.getElementById('startBtn');
+      const roundText = document.getElementById('roundText');
+      const timerText = document.getElementById('timerText');
+      const focusText = document.getElementById('focusText');
+      const scoreboard = document.getElementById('scoreboard');
+      const board = document.getElementById('board');
+      const feedback = document.getElementById('feedback');
+      const resultList = document.getElementById('resultList');
+      const restartBtn = document.getElementById('restartBtn');
+      const backSetupBtn = document.getElementById('backSetupBtn');
+      const turnOverlay = document.getElementById('turnOverlay');
+      const overlayTitle = document.getElementById('overlayTitle');
+      const overlayDesc = document.getElementById('overlayDesc');
+      const overlayBtn = document.getElementById('overlayBtn');
+
+      const DECOY_CHARS = ['春', '年', '乐', '财', '旺', '灯', '喜', '宴', '安'];
+      const PLAYER_LIMIT = 12;
+      let game = null;
+      let timerRef = null;
+      let targetIndex = -1;
+      let targetGolden = false;
+      let lastFeedbackAt = 0;
+
+      function parsePlayers() {
+        const names = playersInput.value
+          .split(/\n|,|，|、/g)
+          .map((v) => v.trim())
+          .filter(Boolean)
+          .slice(0, PLAYER_LIMIT);
+        const unique = [];
+        const taken = new Set();
+        for (const raw of names) {
+          let candidate = raw;
+          let idx = 2;
+          while (taken.has(candidate)) {
+            candidate = raw + idx;
+            idx += 1;
+          }
+          taken.add(candidate);
+          unique.push(candidate);
+        }
+        return unique;
+      }
+
+      function now() {
+        return Date.now();
+      }
+
+      function formatTime(sec) {
+        return '剩余 ' + Math.max(0, sec) + ' 秒';
+      }
+
+      function softVibrate(pattern) {
+        if (navigator.vibrate) {
+          navigator.vibrate(pattern);
+        }
+      }
+
+      function showFeedback(text, type) {
+        feedback.textContent = text;
+        feedback.className = 'feedback ' + type;
+        lastFeedbackAt = now();
+      }
+
+      function clearFeedbackSoon() {
+        const stamp = lastFeedbackAt;
+        setTimeout(() => {
+          if (stamp === lastFeedbackAt) {
+            feedback.textContent = '';
+            feedback.className = 'feedback';
+          }
+        }, 420);
+      }
+
+      function createPlayers(names) {
+        return names.map((name) => ({
+          name,
+          score: 0,
+          combo: 0,
+          bestCombo: 0,
+          hits: 0,
+          misses: 0
+        }));
+      }
+
+      function buildScoreboard() {
+        scoreboard.innerHTML = '';
+        game.players.forEach((p, idx) => {
+          const row = document.createElement('div');
+          row.className = 'score-item' + (idx === game.currentPlayer ? ' active' : '');
+          row.innerHTML =
+            '<div>' +
+            '<div class="name">' +
+            p.name +
+            '</div>' +
+            '<div class="meta">连击 ' +
+            p.combo +
+            ' ｜ 最高连击 ' +
+            p.bestCombo +
+            '</div>' +
+            '</div>' +
+            '<strong>' +
+            p.score +
+            ' 分</strong>';
+          scoreboard.appendChild(row);
+        });
+      }
+
+      function currentPlayerData() {
+        return game.players[game.currentPlayer];
+      }
+
+      function randomInt(max) {
+        return Math.floor(Math.random() * max);
+      }
+
+      function nextBoard() {
+        board.innerHTML = '';
+        targetIndex = randomInt(9);
+        targetGolden = Math.random() < 0.2;
+
+        for (let i = 0; i < 9; i += 1) {
+          const btn = document.createElement('button');
+          btn.className = 'tile';
+          btn.type = 'button';
+
+          if (i === targetIndex) {
+            btn.classList.add('target');
+            if (targetGolden) {
+              btn.classList.add('golden');
+            }
+            btn.textContent = '福';
+          } else {
+            btn.textContent = DECOY_CHARS[randomInt(DECOY_CHARS.length)];
+          }
+
+          btn.addEventListener('click', () => onTileTap(i));
+          board.appendChild(btn);
+        }
+      }
+
+      function onTileTap(index) {
+        if (!game || !game.running) {
+          return;
+        }
+
+        const player = currentPlayerData();
+
+        if (index === targetIndex) {
+          player.hits += 1;
+          player.combo += 1;
+          if (player.combo > player.bestCombo) {
+            player.bestCombo = player.combo;
+          }
+
+          const comboBonus = Math.floor(player.combo / 5);
+          const points = (targetGolden ? 3 : 1) + comboBonus;
+          player.score += points;
+          showFeedback('命中 +' + points + (targetGolden ? '（金福）' : ''), 'ok');
+          softVibrate(15);
+        } else {
+          player.misses += 1;
+          player.combo = 0;
+          player.score = Math.max(0, player.score - 1);
+          showFeedback('点错 -1，连击中断', 'bad');
+          softVibrate([12, 30, 16]);
+        }
+
+        buildScoreboard();
+        clearFeedbackSoon();
+        nextBoard();
+      }
+
+      function updateTopInfo() {
+        roundText.textContent = '第 ' + game.currentRound + ' / ' + game.totalRounds + ' 回合';
+        focusText.textContent = '当前玩家：' + currentPlayerData().name;
+      }
+
+      function startTurnCountdown() {
+        const player = currentPlayerData();
+        let timeLeft = game.turnSeconds;
+        game.running = true;
+        timerText.textContent = formatTime(timeLeft);
+        updateTopInfo();
+        buildScoreboard();
+        nextBoard();
+
+        if (timerRef) {
+          clearInterval(timerRef);
+        }
+
+        timerRef = setInterval(() => {
+          timeLeft -= 1;
+          timerText.textContent = formatTime(timeLeft);
+          if (timeLeft <= 0) {
+            clearInterval(timerRef);
+            timerRef = null;
+            game.running = false;
+            showFeedback(player.name + ' 本回合结束', 'ok');
+            endTurn();
+          }
+        }, 1000);
+      }
+
+      function showTurnOverlay() {
+        const player = currentPlayerData();
+        overlayTitle.textContent = '请把手机交给 ' + player.name;
+        overlayDesc.textContent =
+          '第 ' + game.currentRound + ' / ' + game.totalRounds + ' 回合，限时 ' + game.turnSeconds + ' 秒。准备好后点击开始。';
+        turnOverlay.classList.remove('hidden');
+      }
+
+      function hideTurnOverlay() {
+        turnOverlay.classList.add('hidden');
+      }
+
+      function endTurn() {
+        const isLastPlayer = game.currentPlayer === game.players.length - 1;
+        if (isLastPlayer) {
+          game.currentPlayer = 0;
+          game.currentRound += 1;
+        } else {
+          game.currentPlayer += 1;
+        }
+
+        if (game.currentRound > game.totalRounds) {
+          finishGame();
+          return;
+        }
+
+        setTimeout(() => {
+          clearFeedbackSoon();
+          showTurnOverlay();
+        }, 520);
+      }
+
+      function finishGame() {
+        game.running = false;
+        if (timerRef) {
+          clearInterval(timerRef);
+          timerRef = null;
+        }
+
+        gamePanel.classList.add('hidden');
+        resultPanel.classList.remove('hidden');
+        board.innerHTML = '';
+        timerText.textContent = '回合结束';
+
+        const ranking = [...game.players].sort((a, b) => b.score - a.score);
+        resultList.innerHTML = '';
+
+        ranking.forEach((p, idx) => {
+          const row = document.createElement('div');
+          row.className = 'result-item' + (idx === 0 ? ' top' : '');
+          const medal = idx === 0 ? '🏆' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1 + '.';
+          row.innerHTML =
+            '<div><strong>' +
+            medal +
+            ' ' +
+            p.name +
+            '</strong><div class="meta">命中 ' +
+            p.hits +
+            ' 次 · 点错 ' +
+            p.misses +
+            ' 次 · 最高连击 ' +
+            p.bestCombo +
+            '</div></div><strong>' +
+            p.score +
+            ' 分</strong>';
+          resultList.appendChild(row);
+        });
+      }
+
+      function startGameWithConfig() {
+        const names = parsePlayers();
+        const turnSeconds = Number(turnSecondsInput.value);
+        const totalRounds = Number(roundCountInput.value);
+
+        if (names.length < 2) {
+          alert('至少需要 2 名玩家。');
+          return;
+        }
+        if (!Number.isInteger(turnSeconds) || turnSeconds < 8 || turnSeconds > 45) {
+          alert('每人时长请设置在 8-45 秒。');
+          return;
+        }
+        if (!Number.isInteger(totalRounds) || totalRounds < 1 || totalRounds > 6) {
+          alert('回合数请设置在 1-6 回合。');
+          return;
+        }
+
+        game = {
+          players: createPlayers(names),
+          turnSeconds,
+          totalRounds,
+          currentPlayer: 0,
+          currentRound: 1,
+          running: false
+        };
+
+        setupPanel.classList.add('hidden');
+        resultPanel.classList.add('hidden');
+        gamePanel.classList.remove('hidden');
+        feedback.textContent = '';
+        feedback.className = 'feedback';
+        buildScoreboard();
+        showTurnOverlay();
+      }
+
+      startBtn.addEventListener('click', startGameWithConfig);
+
+      overlayBtn.addEventListener('click', () => {
+        hideTurnOverlay();
+        startTurnCountdown();
+      });
+
+      restartBtn.addEventListener('click', () => {
+        if (!game) {
+          return;
+        }
+        startGameWithConfig();
+      });
+
+      backSetupBtn.addEventListener('click', () => {
+        if (timerRef) {
+          clearInterval(timerRef);
+          timerRef = null;
+        }
+        turnOverlay.classList.add('hidden');
+        resultPanel.classList.add('hidden');
+        gamePanel.classList.add('hidden');
+        setupPanel.classList.remove('hidden');
+        game = null;
+      });
+
+      playersInput.value = '小王\n阿琳\n外婆';
+    </script>
+  </body>
+</html>
