@@ -153,6 +153,7 @@
             <button id="sideToggleBtn" class="btn ghost">收起边栏</button>
             <button id="densityToggleBtn" class="btn ghost">紧凑视图</button>
             <button id="focusMeBtn" class="btn ghost">定位我的座位</button>
+            <button id="changeSeatBtn" class="btn ghost">换座</button>
             <button id="takeSeatBtn" class="btn hidden">入座</button>
             <button id="becomeSpectatorBtn" class="btn hidden">转观战</button>
             <button id="readyBtn" class="btn">准备</button>
@@ -162,6 +163,7 @@
         </header>
 
         <div id="tableNotice" class="notice hidden"></div>
+        <div id="sideDrawerBackdrop" class="side-drawer-backdrop hidden"></div>
 
         <div id="tableGrid" class="grid table-grid">
           <article class="card felt">
@@ -329,8 +331,11 @@
             <h3>观战席</h3>
             <div id="spectatorsList" class="spectators"></div>
 
-            <h3>桌上盈亏</h3>
+            <h3>筹码榜（当前后手）</h3>
             <div id="statsList" class="stats-list"></div>
+
+            <h3>上一手摘要</h3>
+            <div id="lastHandBox" class="history-item">暂无战绩</div>
 
             <h3>净值曲线</h3>
             <div class="chart-wrap">

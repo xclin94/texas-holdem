@@ -147,6 +147,13 @@ body.side-drawer-open {
   overflow: hidden;
 }
 
+.side-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.36);
+  z-index: 6800;
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--line);
@@ -1433,7 +1440,7 @@ input[type='checkbox'] {
 
   .table-canvas {
     min-height: 660px;
-    padding-bottom: 240px;
+    padding-bottom: 120px;
   }
 
   .table-oval {
@@ -1524,16 +1531,16 @@ input[type='checkbox'] {
   }
 
   .action-panel {
-    position: fixed;
-    left: 8px;
-    right: 8px;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
-    z-index: 6500;
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    z-index: 3200;
     border-color: rgba(232, 187, 97, 0.45);
     background: rgba(8, 27, 19, 0.97);
-    margin-top: 0;
-    max-height: min(58vh, 460px);
-    overflow: auto;
+    margin-top: 8px;
+    max-height: none;
+    overflow: visible;
   }
 
   .action-panel.collapsed {

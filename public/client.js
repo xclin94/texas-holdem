@@ -43,6 +43,7 @@ const el = {
   tableView: $('tableView'),
   notice: $('notice'),
   tableNotice: $('tableNotice'),
+  sideDrawerBackdrop: $('sideDrawerBackdrop'),
 
   nameInput: $('nameInput'),
   openCreatePanelBtn: $('openCreatePanelBtn'),
@@ -85,6 +86,7 @@ const el = {
   sideToggleBtn: $('sideToggleBtn'),
   densityToggleBtn: $('densityToggleBtn'),
   focusMeBtn: $('focusMeBtn'),
+  changeSeatBtn: $('changeSeatBtn'),
   takeSeatBtn: $('takeSeatBtn'),
   becomeSpectatorBtn: $('becomeSpectatorBtn'),
   readyBtn: $('readyBtn'),
@@ -120,6 +122,7 @@ const el = {
   profitFilterMeBtn: $('profitFilterMeBtn'),
   bannedList: $('bannedList'),
   historyList: $('historyList'),
+  lastHandBox: $('lastHandBox'),
   replayBox: $('replayBox'),
 
   actionPanel: $('actionPanel'),
@@ -361,6 +364,9 @@ function applySideLayout() {
   el.tableGrid.classList.toggle('side-collapsed', uiSideCollapsed || drawerMode);
   el.tableGrid.classList.toggle('side-drawer-open', drawerOpen);
   el.sidePanel.classList.toggle('hidden', uiSideCollapsed);
+  if (el.sideDrawerBackdrop) {
+    el.sideDrawerBackdrop.classList.toggle('hidden', !drawerOpen);
+  }
   document.body.classList.toggle('side-drawer-open', drawerOpen);
   if (drawerOpen) {
     el.sidePanel.scrollTop = 0;
@@ -802,11 +808,25 @@ function createAdminButtons(targetId) {
   kickBtn.textContent = '踢出';
   kickBtn.onclick = () => socket.emit('kickMember', { targetId });
 
+  const seatBtn = document.createElement('button');
+  seatBtn.className = 'btn tiny ghost';
+  seatBtn.textContent = '换座';
+  seatBtn.onclick = () => {
+    const maxPlayers = roomState?.settings?.maxPlayers || 9;
+    const seatText = window.prompt(`输入新座位号（1-${maxPlayers}）`);
+    if (!seatText) return;
+    const raw = Number(seatText);
+    if (!Number.isFinite(raw)) return;
+    const seat = clampInt(raw, 1, maxPlayers);
+    socket.emit('changeSeat', { targetId, seat });
+  };
+
   const banBtn = document.createElement('button');
   banBtn.className = 'btn tiny danger';
   banBtn.textContent = '封禁';
   banBtn.onclick = () => socket.emit('banMember', { targetId });
 
+  box.appendChild(seatBtn);
   box.appendChild(kickBtn);
   box.appendChild(banBtn);
   return box;
@@ -1313,6 +1333,26 @@ function renderHistory() {
   }
 }
 
+function renderLastHandSummary() {
+  if (!el.lastHandBox) return;
+  const latest = roomState?.handHistory?.[0];
+  if (!latest) {
+    el.lastHandBox.textContent = '暂无战绩';
+    return;
+  }
+
+  const winners = (latest.winners || [])
+    .map((w) => `${w.name || roomMemberName(w.playerId)} +${w.amount}`)
+    .join(' / ');
+  const stacks = (latest.stacksAfter || [])
+    .slice()
+    .sort((a, b) => (b.stackAfter || 0) - (a.stackAfter || 0))
+    .map((p) => `${p.name || roomMemberName(p.playerId)}: ${p.stackAfter ?? '-'}`)
+    .join(' · ');
+
+  el.lastHandBox.innerHTML = `<strong>Hand #${latest.handNo}</strong><br/>盲注 ${latest.blinds?.smallBlind || '-'} / ${latest.blinds?.bigBlind || '-'} (L${latest.blinds?.level || 1})<br/>赢家：${winners || '-'}<br/>结算后筹码：${stacks || '-'}`;
+}
+
 function renderReplay() {
   if (!replayState) {
     el.replayBox.classList.add('hidden');
@@ -1456,6 +1496,9 @@ function renderActions() {
 
   el.actionPanel.classList.remove('hidden');
   applyActionPanelCollapsed();
+  if (isMobileView() && !uiActionPanelCollapsed) {
+    el.actionPanel.scrollIntoView({ behavior: uiMotionMode === 'reduced' ? 'auto' : 'smooth', block: 'nearest' });
+  }
 
   if (actionState.mode === 'straddle') {
     el.normalActionBox.classList.add('hidden');
@@ -1579,6 +1622,7 @@ function renderStatus() {
 
   el.takeSeatBtn.classList.toggle('hidden', !roomState.canTakeSeat);
   el.becomeSpectatorBtn.classList.toggle('hidden', !roomState.canBecomeSpectator);
+  el.changeSeatBtn.classList.toggle('hidden', !isPlayer);
 
   const sessionSec = Math.max(0, Math.ceil((roomState.sessionEndsAt - Date.now()) / 1000));
   el.sessionTimer.textContent = `时长剩余 ${fmtClock(sessionSec)}`;
@@ -1700,6 +1744,7 @@ function renderRoom() {
   renderStats();
   renderBanned();
   renderHistory();
+  renderLastHandSummary();
   renderReplay();
   renderActions();
   renderResult();
@@ -1931,7 +1976,9 @@ el.motionToggleBtn.addEventListener('click', () => {
 });
 
 el.sideToggleBtn.addEventListener('click', () => {
-  setSideCollapsed(!uiSideCollapsed, true);
+  const willCollapse = !uiSideCollapsed;
+  setSideCollapsed(willCollapse, true);
+  showHandBanner(willCollapse ? '已收起边栏' : '已展开边栏', willCollapse ? 'info' : 'ok', 800);
 });
 
 document.addEventListener('click', (evt) => {
@@ -1942,6 +1989,14 @@ document.addEventListener('click', (evt) => {
   if (el.sideToggleBtn.contains(target)) return;
   setSideCollapsed(true, true);
 });
+
+if (el.sideDrawerBackdrop) {
+  el.sideDrawerBackdrop.addEventListener('click', () => {
+    if (!uiSideCollapsed) {
+      setSideCollapsed(true, true);
+    }
+  });
+}
 
 el.actionPanelToggleBtn.addEventListener('click', () => {
   setActionPanelCollapsed(!uiActionPanelCollapsed, true);
@@ -1965,6 +2020,18 @@ el.focusMeBtn.addEventListener('click', () => {
   void mine.offsetWidth;
   mine.classList.add('spotlight');
   mine.scrollIntoView({ behavior: uiMotionMode === 'reduced' ? 'auto' : 'smooth', block: 'center', inline: 'center' });
+});
+
+el.changeSeatBtn.addEventListener('click', () => {
+  const me = roomPlayerById(meId);
+  if (!me) return;
+  const maxPlayers = roomState?.settings?.maxPlayers || 9;
+  const seatText = window.prompt(`输入想换到的座位号（1-${maxPlayers}）`, String(me.seat || ''));
+  if (!seatText) return;
+  const raw = Number(seatText);
+  if (!Number.isFinite(raw)) return;
+  const seat = clampInt(raw, 1, maxPlayers);
+  socket.emit('changeSeat', { seat });
 });
 
 el.takeSeatBtn.addEventListener('click', () => socket.emit('takeSeat'));

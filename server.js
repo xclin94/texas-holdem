@@ -248,7 +248,7 @@ function resetHandFlags(player) {
 }
 
 function initPlayer(player, startingStack) {
-  player.ready = false;
+  player.ready = true;
   player.stack = startingStack;
   resetHandFlags(player);
 }
@@ -1805,6 +1805,76 @@ io.on('connection', (socket) => {
     reassignHost(room);
 
     logRoom(room, `${player.name} 切换为观战`);
+    broadcastRoom(room);
+    broadcastLobby();
+  });
+
+  socket.on('changeSeat', (payload = {}) => {
+    const room = currentRoomOfSocket(socket);
+    if (!room) return;
+
+    const requester = getPlayer(room, socket.id);
+    if (!requester) {
+      sendError(socket, '观战者不能换座');
+      return;
+    }
+
+    const targetId = String(payload.targetId || socket.id);
+    const target = getPlayer(room, targetId);
+    if (!target) {
+      sendError(socket, '目标玩家不存在');
+      return;
+    }
+
+    if (targetId !== socket.id && room.hostId !== socket.id) {
+      sendError(socket, '只有房主可以为其他玩家换座');
+      return;
+    }
+
+    const targetInHand = Boolean(room.game && !room.game.finished && target.inHand && !target.folded);
+    if (targetInHand) {
+      sendError(socket, '当前在手牌中，不能换座');
+      return;
+    }
+
+    const seat = clampInt(payload.seat, 1, room.settings.maxPlayers, 0);
+    if (!seat) {
+      sendError(socket, '座位号无效');
+      return;
+    }
+
+    if (target.seat === seat) {
+      sendError(socket, '已在该座位');
+      return;
+    }
+
+    const occupant = room.players.find((p) => p.seat === seat);
+    if (!occupant) {
+      const oldSeat = target.seat;
+      target.seat = seat;
+      logRoom(room, `${target.name} 从 ${oldSeat} 号位换到 ${seat} 号位`);
+      broadcastRoom(room);
+      broadcastLobby();
+      return;
+    }
+
+    if (occupant.id === target.id) {
+      sendError(socket, '已在该座位');
+      return;
+    }
+
+    const canSwap =
+      room.hostId === socket.id &&
+      (!(room.game && !room.game.finished && occupant.inHand && !occupant.folded));
+    if (!canSwap) {
+      sendError(socket, '目标座位已有人，无法换座');
+      return;
+    }
+
+    const oldSeat = target.seat;
+    target.seat = seat;
+    occupant.seat = oldSeat;
+    logRoom(room, `${target.name} 与 ${occupant.name} 交换了座位 (${oldSeat}<->${seat})`);
     broadcastRoom(room);
     broadcastLobby();
   });
