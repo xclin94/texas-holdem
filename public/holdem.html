@@ -147,6 +147,9 @@
           </div>
 
           <div class="actions">
+            <button id="startBtn" class="btn primary">房主开局</button>
+            <button id="leaveBtn" class="btn danger">离开</button>
+            <button id="readyBtn" class="btn">准备</button>
             <button id="themeToggleBtn" class="btn ghost">主题：森林</button>
             <button id="soundToggleBtn" class="btn ghost">提示音：开</button>
             <button id="motionToggleBtn" class="btn ghost">动效：标准</button>
@@ -156,9 +159,6 @@
             <button id="changeSeatBtn" class="btn ghost">换座</button>
             <button id="takeSeatBtn" class="btn hidden">入座</button>
             <button id="becomeSpectatorBtn" class="btn hidden">转观战</button>
-            <button id="readyBtn" class="btn">准备</button>
-            <button id="startBtn" class="btn primary">房主开局</button>
-            <button id="leaveBtn" class="btn danger">离开</button>
           </div>
         </header>
 
@@ -172,6 +172,10 @@
               <div class="status-cell">
                 <div class="label">阶段</div>
                 <div id="phaseText" class="value">等待开局</div>
+              </div>
+              <div class="status-cell">
+                <div class="label">当前牌型</div>
+                <div id="handTypeText" class="value">-</div>
               </div>
               <div class="status-cell status-pot">
                 <div class="label">底池</div>
@@ -203,6 +207,7 @@
               <span id="blindLevelText">级别 L1</span>
               <span id="nextBlindText">下级别 --:--</span>
             </div>
+            <div id="turnWarning" class="turn-warning hidden"></div>
 
             <section id="tableCanvas" class="table-canvas">
               <div class="table-oval">
@@ -226,18 +231,22 @@
               <p id="actionMiniText" class="action-mini hidden"></p>
 
               <div id="normalActionBox">
-                <div class="actions">
-                  <button id="foldBtn" class="btn danger">弃牌</button>
+                <div class="actions action-main-row">
                   <button id="checkBtn" class="btn">过牌</button>
                   <button id="callBtn" class="btn">跟注</button>
-                  <button id="allinBtn" class="btn">全下</button>
+                  <button id="betBtn" class="btn primary">加注到</button>
                 </div>
-                <div class="field-row compact">
-                  <label>
-                    下注/加注到
-                    <input id="betInput" type="number" min="0" step="1" />
-                  </label>
-                  <button id="betBtn" class="btn primary">提交</button>
+                <div id="raiseControlBox" class="raise-control">
+                  <div class="raise-head">
+                    <span id="betRangeLabel">加注到</span>
+                    <strong id="betRangeValue">0</strong>
+                  </div>
+                  <input id="betRangeInput" type="range" min="0" max="0" step="1" />
+                  <input id="betInput" class="hidden" type="number" min="0" step="1" />
+                </div>
+                <div class="actions action-sub-row">
+                  <button id="foldBtn" class="btn danger">弃牌</button>
+                  <button id="allinBtn" class="btn">全下</button>
                 </div>
                 <div id="quickRaiseBox" class="quick-raise">
                   <button class="btn tiny quick-raise-btn" data-pot-ratio="0.33">1/3池</button>

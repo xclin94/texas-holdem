@@ -571,6 +571,25 @@ input[type='checkbox'] {
   font-size: 13px;
 }
 
+.turn-warning {
+  margin: -2px 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 116, 140, 0.55);
+  background: rgba(123, 31, 42, 0.38);
+  color: #ffe3ea;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.turn-warning.urgent {
+  border-color: rgba(255, 149, 110, 0.72);
+  background: linear-gradient(160deg, rgba(123, 31, 42, 0.6), rgba(214, 84, 39, 0.42));
+  color: #fff2d6;
+  box-shadow: 0 0 0 1px rgba(255, 149, 110, 0.25);
+}
+
 .table-canvas {
   position: relative;
   min-height: 700px;
@@ -723,10 +742,10 @@ input[type='checkbox'] {
 }
 
 .seat-cards .card-face {
-  width: 30px;
-  height: 40px;
+  width: 32px;
+  height: 44px;
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .seat-node.dense .seat-head {
@@ -738,8 +757,8 @@ input[type='checkbox'] {
 }
 
 .seat-node.dense .seat-cards .card-face {
-  width: 24px;
-  height: 34px;
+  width: 26px;
+  height: 36px;
   font-size: 10px;
 }
 
@@ -768,8 +787,8 @@ input[type='checkbox'] {
 }
 
 .card-face {
-  width: 46px;
-  height: 56px;
+  width: 50px;
+  height: 62px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.23);
   display: flex;
@@ -779,6 +798,7 @@ input[type='checkbox'] {
   font-weight: 700;
   background: #f7faf8;
   color: #0f1720;
+  font-size: 15px;
 }
 
 .card-face.red {
@@ -886,6 +906,82 @@ input[type='checkbox'] {
   display: block !important;
 }
 
+.action-main-row,
+.action-sub-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  flex-wrap: nowrap;
+}
+
+.action-main-row .btn {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.action-sub-row .btn {
+  flex: 1 1 0;
+}
+
+.raise-control {
+  margin: 8px 0;
+  border: 1px solid rgba(232, 187, 97, 0.32);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.26);
+  padding: 8px;
+}
+
+.raise-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.raise-head strong {
+  color: #ffe8b4;
+  font-size: 16px;
+}
+
+#betRangeInput {
+  width: 100%;
+  accent-color: #e8bb61;
+}
+
+#betRangeInput::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(232, 187, 97, 0.55), rgba(255, 233, 178, 0.55));
+}
+
+#betRangeInput::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -5px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  background: #fff0c8;
+}
+
+#betRangeInput::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(232, 187, 97, 0.55), rgba(255, 233, 178, 0.55));
+}
+
+#betRangeInput::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  background: #fff0c8;
+}
+
 .quick-raise {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
@@ -901,6 +997,12 @@ input[type='checkbox'] {
   border-color: rgba(232, 187, 97, 0.6);
   background: rgba(232, 187, 97, 0.22);
   color: #ffe8b4;
+}
+
+.turn-timer-urgent {
+  color: #ffd2d9;
+  text-shadow: 0 0 8px rgba(255, 86, 117, 0.42);
+  animation: timerPulse 0.9s ease-in-out infinite;
 }
 
 .result-winners {
@@ -1005,6 +1107,16 @@ input[type='checkbox'] {
   }
   100% {
     transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes timerPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
   }
 }
 
@@ -1506,9 +1618,9 @@ input[type='checkbox'] {
   }
 
   .card-face {
-    width: 40px;
-    height: 48px;
-    font-size: 13px;
+    width: 44px;
+    height: 54px;
+    font-size: 14px;
   }
 
   .seat-node {
@@ -1559,10 +1671,10 @@ input[type='checkbox'] {
   }
 
   .seat-cards .card-face {
-    width: 22px;
-    height: 30px;
+    width: 24px;
+    height: 34px;
     border-radius: 6px;
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .action-panel {
@@ -1587,6 +1699,14 @@ input[type='checkbox'] {
     flex: 1 1 calc(50% - 8px);
     min-width: 0;
     padding: 11px 8px;
+  }
+
+  .action-panel .action-main-row .btn {
+    flex: 1 1 0;
+  }
+
+  .action-panel .action-sub-row .btn {
+    flex: 1 1 calc(50% - 8px);
   }
 
   .quick-raise {
@@ -1674,16 +1794,17 @@ input[type='checkbox'] {
   }
 
   .seat-cards .card-face {
-    width: 20px;
-    height: 28px;
-    font-size: 9px;
+    width: 22px;
+    height: 32px;
+    font-size: 10px;
   }
 
   .action-panel {
-    left: 6px;
-    right: 6px;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
-    max-height: min(56vh, 400px);
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    max-height: none;
     padding: 8px;
   }
 
@@ -1728,11 +1849,12 @@ input[type='checkbox'] {
   }
 
   .action-panel {
+    position: relative;
     left: auto;
-    right: calc(env(safe-area-inset-right, 0px) + 8px);
-    top: calc(env(safe-area-inset-top, 0px) + 64px);
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
-    width: min(42vw, 320px);
+    right: auto;
+    top: auto;
+    bottom: auto;
+    width: auto;
     max-height: none;
   }
 
@@ -1744,7 +1866,7 @@ input[type='checkbox'] {
   }
 
   .action-panel.collapsed {
-    width: min(32vw, 260px);
+    width: auto;
     height: auto;
   }
 

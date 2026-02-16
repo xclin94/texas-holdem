@@ -95,6 +95,7 @@ const el = {
   leaveBtn: $('leaveBtn'),
 
   phaseText: $('phaseText'),
+  handTypeText: $('handTypeText'),
   potText: $('potText'),
   potHeroText: $('potHeroText'),
   betText: $('betText'),
@@ -108,6 +109,7 @@ const el = {
   blindText: $('blindText'),
   blindLevelText: $('blindLevelText'),
   nextBlindText: $('nextBlindText'),
+  turnWarning: $('turnWarning'),
 
   communityCards: $('communityCards'),
   handBanner: $('handBanner'),
@@ -132,6 +134,10 @@ const el = {
   actionMiniText: $('actionMiniText'),
   normalActionBox: $('normalActionBox'),
   quickRaiseBox: $('quickRaiseBox'),
+  raiseControlBox: $('raiseControlBox'),
+  betRangeLabel: $('betRangeLabel'),
+  betRangeValue: $('betRangeValue'),
+  betRangeInput: $('betRangeInput'),
   straddleBox: $('straddleBox'),
   foldBtn: $('foldBtn'),
   checkBtn: $('checkBtn'),
@@ -645,11 +651,15 @@ function suitSymbol(s) {
   return { S: '♠', H: '♥', D: '♦', C: '♣' }[s] || s;
 }
 
+function rankDisplay(rank) {
+  return rank === 'T' ? '10' : rank;
+}
+
 function cardNode(code, hidden = false, extraClass = '') {
   const node = document.createElement('div');
   node.className = `card-face${hidden ? ' back' : ''}${extraClass ? ` ${extraClass}` : ''}`;
   if (!hidden) {
-    node.textContent = `${code[0]}${suitSymbol(code[1])}`;
+    node.textContent = `${rankDisplay(code[0])}${suitSymbol(code[1])}`;
     if (code[1] === 'H' || code[1] === 'D') node.classList.add('red');
   }
   return node;
@@ -1468,6 +1478,32 @@ function calcQuickRaiseTarget(actionState, ratio) {
   return target;
 }
 
+function updateBetRange(actionState, rawValue) {
+  const canBetOrRaise = Boolean(actionState && (actionState.canBet || actionState.canRaise));
+  el.raiseControlBox.classList.toggle('hidden', !canBetOrRaise);
+  if (!canBetOrRaise) {
+    el.betInput.value = '';
+    el.betRangeValue.textContent = '0';
+    return;
+  }
+
+  const minTo = actionState.canBet ? actionState.minBetTo : actionState.minRaiseTo;
+  const maxTo = actionState.maxTo;
+  const fallback = Math.min(maxTo, minTo);
+  const parsed = Number(rawValue);
+  const target = clampInt(Number.isFinite(parsed) ? parsed : fallback, minTo, maxTo);
+
+  el.betInput.min = String(minTo);
+  el.betInput.max = String(maxTo);
+  el.betInput.value = String(target);
+
+  el.betRangeLabel.textContent = actionState.canBet ? '下注到' : '加注到';
+  el.betRangeInput.min = String(minTo);
+  el.betRangeInput.max = String(maxTo);
+  el.betRangeInput.value = String(target);
+  el.betRangeValue.textContent = String(target);
+}
+
 function renderQuickRaiseButtons(actionState) {
   const canQuick = Boolean(actionState && (actionState.canBet || actionState.canRaise));
   el.quickRaiseBox.classList.toggle('hidden', !canQuick);
@@ -1523,14 +1559,12 @@ function renderActions() {
 
   el.actionPanel.classList.remove('hidden');
   applyActionPanelCollapsed();
-  if (isMobileView() && !uiActionPanelCollapsed) {
-    el.actionPanel.scrollIntoView({ behavior: uiMotionMode === 'reduced' ? 'auto' : 'smooth', block: 'nearest' });
-  }
 
   if (actionState.mode === 'straddle') {
     el.normalActionBox.classList.add('hidden');
     el.straddleBox.classList.remove('hidden');
     el.quickRaiseBox.classList.add('hidden');
+    el.raiseControlBox.classList.add('hidden');
 
     el.actionInfo.textContent = `你可以选择 straddle。最小到 ${actionState.minStraddleTo}，最大到 ${actionState.maxTo}`;
     el.straddleInput.min = String(actionState.minStraddleTo);
@@ -1547,32 +1581,24 @@ function renderActions() {
   el.normalActionBox.classList.remove('hidden');
   el.straddleBox.classList.add('hidden');
 
-  el.actionInfo.textContent = `需跟注 ${actionState.toCall} · 最小加注到 ${actionState.minRaiseTo} · 最大到 ${actionState.maxTo}`;
-  el.actionMiniText.textContent = `跟 ${actionState.toCall} / 最小 ${actionState.minRaiseTo}`;
+  const canBetOrRaise = actionState.canBet || actionState.canRaise;
+  const minTo = actionState.canBet ? actionState.minBetTo : actionState.minRaiseTo;
+  const minText = canBetOrRaise ? ` · 最小${actionState.canBet ? '下注' : '加注'}到 ${minTo}` : '';
+  el.actionInfo.textContent = `需跟注 ${actionState.toCall}${minText} · 最大到 ${actionState.maxTo}`;
+  el.actionMiniText.textContent = `跟 ${actionState.toCall}${canBetOrRaise ? ` / 最小 ${minTo}` : ''}`;
   el.actionMiniText.classList.toggle('hidden', !uiActionPanelCollapsed);
 
   el.foldBtn.disabled = actionPending;
-  el.checkBtn.disabled = !actionState.canCheck || actionPending;
-  el.callBtn.disabled = !actionState.canCall || actionPending;
+  el.checkBtn.disabled = !(actionState.canCheck && actionState.toCall === 0) || actionPending;
+  el.callBtn.disabled = !(actionState.canCall && actionState.toCall > 0) || actionPending;
   el.allinBtn.disabled = actionState.maxTo <= 0 || actionPending;
+  el.callBtn.textContent = actionState.toCall > 0 ? `跟注 ${actionState.toCall}` : '跟注';
 
-  if (actionState.canBet) {
-    el.betBtn.textContent = '下注到';
-    el.betInput.min = String(actionState.minBetTo);
-    if (!el.betInput.value) el.betInput.value = String(actionState.minBetTo);
-  } else if (actionState.canRaise) {
-    el.betBtn.textContent = '加注到';
-    el.betInput.min = String(actionState.minRaiseTo);
-    if (!el.betInput.value || Number(el.betInput.value) < actionState.minRaiseTo) {
-      el.betInput.value = String(actionState.minRaiseTo);
-    }
-  } else {
-    el.betBtn.textContent = '下注/加注';
-  }
-
-  el.betInput.max = String(actionState.maxTo);
-  el.betBtn.disabled = !(actionState.canBet || actionState.canRaise) || actionPending;
+  el.betBtn.textContent = actionState.canBet ? '下注到' : actionState.canRaise ? '加注到' : '下注/加注';
+  updateBetRange(actionState, el.betInput.value || minTo);
+  el.betBtn.disabled = !canBetOrRaise || actionPending;
   renderQuickRaiseButtons(actionState);
+  syncQuickRaiseActive();
 }
 
 function renderStatus() {
@@ -1611,6 +1637,7 @@ function renderStatus() {
   } else {
     el.phaseText.textContent = g ? phaseLabel(g.phase) : '等待开局';
   }
+  el.handTypeText.textContent = roomState?.myHandName || '-';
   const potTotal = g?.potTotal || 0;
   const currentBet = g?.currentBet || 0;
   el.potText.textContent = String(potTotal);
@@ -1656,6 +1683,24 @@ function renderStatus() {
 
   const turnSec = g?.turnDeadlineAt ? Math.max(0, Math.ceil((g.turnDeadlineAt - Date.now()) / 1000)) : null;
   el.turnTimerText.textContent = turnSec === null ? '--' : `${turnSec}s`;
+  const myTurn = Boolean(g && !g.finished && g.turnId === meId);
+  const urgentTurn = Boolean(myTurn && turnSec !== null && turnSec <= 8);
+  el.turnTimerText.classList.toggle('turn-timer-urgent', urgentTurn);
+
+  if (el.turnWarning) {
+    let warning = '';
+    if (myTurn && turnSec !== null && turnSec <= 12) {
+      if (roomState?.actionState?.mode === 'straddle') {
+        warning = `请在 ${turnSec}s 内决定是否 straddle，超时将自动跳过`;
+      } else {
+        const timeoutAction = roomState?.actionState?.toCall > 0 ? '弃牌' : '过牌';
+        warning = `倒计时 ${turnSec}s，超时将自动${timeoutAction}`;
+      }
+    }
+    el.turnWarning.textContent = warning;
+    el.turnWarning.classList.toggle('hidden', !warning);
+    el.turnWarning.classList.toggle('urgent', urgentTurn);
+  }
 
   let tableTip = '';
   let tipTone = 'info';
@@ -2108,14 +2153,23 @@ el.copyRoomBtn.addEventListener('click', async () => {
 });
 
 el.foldBtn.addEventListener('click', () => sendPlayerAction({ action: 'fold' }));
-el.checkBtn.addEventListener('click', () => sendPlayerAction({ action: 'check' }));
-el.callBtn.addEventListener('click', () => sendPlayerAction({ action: 'call' }));
+el.checkBtn.addEventListener('click', () => {
+  const actionState = roomState?.actionState;
+  if (!actionState || !(actionState.canCheck && actionState.toCall === 0)) return;
+  sendPlayerAction({ action: 'check' });
+});
+el.callBtn.addEventListener('click', () => {
+  const actionState = roomState?.actionState;
+  if (!actionState || !(actionState.canCall && actionState.toCall > 0)) return;
+  sendPlayerAction({ action: 'call' });
+});
 el.allinBtn.addEventListener('click', () => sendPlayerAction({ action: 'allin' }));
 
 el.betBtn.addEventListener('click', () => {
-  const amount = parseNum(el.betInput.value, 0);
-  if (!roomState?.actionState) return;
-  const action = roomState.actionState.canBet ? 'bet' : 'raise';
+  const actionState = roomState?.actionState;
+  if (!actionState || !(actionState.canBet || actionState.canRaise)) return;
+  const amount = parseNum(el.betRangeInput.value || el.betInput.value, 0);
+  const action = actionState.canBet ? 'bet' : 'raise';
   sendPlayerAction({ action, amount });
 });
 
@@ -2124,13 +2178,21 @@ quickRaiseButtons.forEach((btn) => {
     if (!roomState?.actionState || btn.disabled) return;
     const target = parseNum(btn.dataset.target, 0);
     if (!target) return;
-    el.betInput.value = String(target);
+    updateBetRange(roomState.actionState, target);
     const action = roomState.actionState.canBet ? 'bet' : 'raise';
     sendPlayerAction({ action, amount: target });
   });
 });
 
 el.betInput.addEventListener('input', () => {
+  if (!roomState?.actionState) return;
+  updateBetRange(roomState.actionState, el.betInput.value);
+  syncQuickRaiseActive();
+});
+
+el.betRangeInput.addEventListener('input', () => {
+  if (!roomState?.actionState) return;
+  updateBetRange(roomState.actionState, el.betRangeInput.value);
   syncQuickRaiseActive();
 });
 

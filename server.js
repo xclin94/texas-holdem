@@ -1335,6 +1335,16 @@ function buildActionState(room, viewer) {
   };
 }
 
+function buildViewerHandName(viewer, game) {
+  if (!viewer || !game) return '-';
+  const holeCards = Array.isArray(viewer.holeCards) ? viewer.holeCards.filter(Boolean) : [];
+  if (holeCards.length < 2) return '-';
+  const community = Array.isArray(game.community) ? game.community.filter(Boolean) : [];
+  const cards = [...holeCards, ...community];
+  if (cards.length < 2) return '-';
+  return evaluate7(cards).name;
+}
+
 function serializeRoom(room, viewerId) {
   ensureExpiryLog(room);
 
@@ -1449,6 +1459,7 @@ function serializeRoom(room, viewerId) {
       }))
       .reverse(),
     actionState: buildActionState(room, viewer),
+    myHandName: buildViewerHandName(viewer, game),
     serverNow: Date.now(),
   };
 }
