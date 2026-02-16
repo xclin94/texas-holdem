@@ -19,7 +19,7 @@ let uiSideCollapsed = localStorage.getItem('holdem_side_collapsed')
   : window.innerWidth <= 1080;
 let uiActionPanelCollapsed = localStorage.getItem('holdem_action_collapsed')
   ? localStorage.getItem('holdem_action_collapsed') === '1'
-  : window.innerWidth <= 760;
+  : window.innerWidth <= 760 || (window.innerWidth <= 960 && window.innerHeight <= 540);
 let uiMotionMode = localStorage.getItem('holdem_motion_mode') || 'full';
 let uiProfitFilter = localStorage.getItem('holdem_profit_filter') || 'all';
 let bannerTimer = null;
@@ -806,11 +806,15 @@ function createAdminButtons(targetId) {
 }
 
 function isMobileView() {
-  return window.innerWidth <= 760;
+  return window.innerWidth <= 760 || isLandscapePhoneView();
+}
+
+function isLandscapePhoneView() {
+  return window.innerWidth <= 960 && window.innerHeight <= 540;
 }
 
 function isNarrowMobileView() {
-  return window.innerWidth <= 420;
+  return window.innerWidth <= 420 || (isLandscapePhoneView() && window.innerHeight <= 430);
 }
 
 function compactStackText(value) {

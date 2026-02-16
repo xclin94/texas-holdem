@@ -82,7 +82,8 @@ body[data-motion='reduced'] .card-face.deal-seat {
 .app {
   max-width: 1320px;
   margin: 0 auto;
-  padding: 18px;
+  padding: max(14px, env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px))
+    max(18px, env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-left, 0px));
   position: relative;
 }
 
@@ -1266,7 +1267,8 @@ input[type='checkbox'] {
 
 @media (max-width: 760px) {
   .app {
-    padding: 10px;
+    padding: max(10px, env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-right, 0px))
+      max(12px, env(safe-area-inset-bottom, 0px)) max(10px, env(safe-area-inset-left, 0px));
   }
 
   .hero h1 {
@@ -1386,7 +1388,7 @@ input[type='checkbox'] {
 
   .room-top {
     position: sticky;
-    top: 0;
+    top: env(safe-area-inset-top, 0px);
     z-index: 5200;
     backdrop-filter: blur(6px);
   }
@@ -1398,12 +1400,12 @@ input[type='checkbox'] {
 
   .notice {
     position: sticky;
-    top: 6px;
+    top: calc(env(safe-area-inset-top, 0px) + 6px);
     z-index: 7000;
   }
 
   #tableNotice {
-    top: 58px;
+    top: calc(env(safe-area-inset-top, 0px) + 58px);
   }
 
   .blind-row {
@@ -1558,7 +1560,8 @@ input[type='checkbox'] {
 
 @media (max-width: 420px) {
   .app {
-    padding: 8px;
+    padding: max(8px, env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px))
+      max(10px, env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
   }
 
   .card {
@@ -1623,6 +1626,59 @@ input[type='checkbox'] {
   .action-panel .actions .btn {
     padding: 10px 7px;
     font-size: 13px;
+  }
+
+  .quick-raise {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (orientation: landscape) and (max-height: 540px) and (max-width: 960px) {
+  .app {
+    padding-top: max(8px, env(safe-area-inset-top, 0px));
+    padding-right: max(8px, env(safe-area-inset-right, 0px));
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+    padding-left: max(8px, env(safe-area-inset-left, 0px));
+  }
+
+  .table-canvas {
+    min-height: 560px;
+    padding-bottom: 92px;
+  }
+
+  .table-oval {
+    height: 196px;
+  }
+
+  .room-top {
+    top: env(safe-area-inset-top, 0px);
+  }
+
+  .room-top .actions .btn {
+    padding: 7px 9px;
+    font-size: 12px;
+  }
+
+  #tableNotice {
+    top: calc(env(safe-area-inset-top, 0px) + 52px);
+  }
+
+  .action-panel {
+    left: auto;
+    right: calc(env(safe-area-inset-right, 0px) + 8px);
+    top: calc(env(safe-area-inset-top, 0px) + 64px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+    width: min(42vw, 320px);
+    max-height: none;
+  }
+
+  .action-panel.collapsed {
+    width: min(32vw, 260px);
+    height: auto;
+  }
+
+  .action-panel .actions .btn {
+    padding: 9px 6px;
   }
 
   .quick-raise {
