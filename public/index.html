@@ -160,25 +160,29 @@
         <div class="grid table-grid">
           <article class="card felt">
             <div class="status-row">
-              <div>
+              <div class="status-cell">
                 <div class="label">阶段</div>
                 <div id="phaseText" class="value">等待开局</div>
               </div>
-              <div>
+              <div class="status-cell status-pot">
                 <div class="label">底池</div>
-                <div id="potText" class="value">0</div>
+                <div id="potText" class="value value-main">0</div>
               </div>
-              <div>
+              <div class="status-cell">
                 <div class="label">当前注</div>
                 <div id="betText" class="value">0</div>
               </div>
-              <div>
+              <div class="status-cell">
                 <div class="label">轮到</div>
                 <div id="turnText" class="value">-</div>
               </div>
-              <div>
+              <div class="status-cell">
                 <div class="label">行动倒计时</div>
                 <div id="turnTimerText" class="value">--</div>
+              </div>
+              <div class="status-cell status-stack">
+                <div class="label">我的后手</div>
+                <div id="myStackText" class="value value-main">-</div>
               </div>
             </div>
 
@@ -191,8 +195,13 @@
               <span id="nextBlindText">下级别 --:--</span>
             </div>
 
-            <section class="table-canvas">
+            <section id="tableCanvas" class="table-canvas">
               <div class="table-oval">
+                <div class="pot-center">
+                  <span>底池</span>
+                  <strong id="potHeroText">0</strong>
+                  <small>当前注 <em id="betHeroText">0</em></small>
+                </div>
                 <div class="table-center-title">公共牌</div>
                 <div id="communityCards" class="cards board-cards"></div>
               </div>
@@ -216,6 +225,12 @@
                     <input id="betInput" type="number" min="0" step="1" />
                   </label>
                   <button id="betBtn" class="btn primary">提交</button>
+                </div>
+                <div id="quickRaiseBox" class="quick-raise">
+                  <button class="btn tiny quick-raise-btn" data-pot-ratio="0.33">1/3池</button>
+                  <button class="btn tiny quick-raise-btn" data-pot-ratio="0.5">1/2池</button>
+                  <button class="btn tiny quick-raise-btn" data-pot-ratio="1">1池</button>
+                  <button class="btn tiny quick-raise-btn" data-pot-ratio="2">2池</button>
                 </div>
               </div>
 

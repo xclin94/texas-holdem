@@ -63,7 +63,10 @@ const el = {
 
   phaseText: $('phaseText'),
   potText: $('potText'),
+  potHeroText: $('potHeroText'),
   betText: $('betText'),
+  betHeroText: $('betHeroText'),
+  myStackText: $('myStackText'),
   turnText: $('turnText'),
   turnTimerText: $('turnTimerText'),
   dealerText: $('dealerText'),
@@ -74,6 +77,7 @@ const el = {
   nextBlindText: $('nextBlindText'),
 
   communityCards: $('communityCards'),
+  tableCanvas: $('tableCanvas'),
   seatMap: $('seatMap'),
   spectatorsList: $('spectatorsList'),
   bannedList: $('bannedList'),
@@ -83,6 +87,7 @@ const el = {
   actionPanel: $('actionPanel'),
   actionInfo: $('actionInfo'),
   normalActionBox: $('normalActionBox'),
+  quickRaiseBox: $('quickRaiseBox'),
   straddleBox: $('straddleBox'),
   foldBtn: $('foldBtn'),
   checkBtn: $('checkBtn'),
@@ -115,6 +120,14 @@ const el = {
   sendChatBtn: $('sendChatBtn'),
 };
 
+const quickRaiseButtons = Array.from(document.querySelectorAll('.quick-raise-btn'));
+const quickRaiseLabelMap = {
+  '0.33': '1/3池',
+  '0.5': '1/2池',
+  '1': '1池',
+  '2': '2池',
+};
+
 function showNotice(target, msg, tone = 'info') {
   if (!msg) {
     target.classList.add('hidden');
@@ -141,6 +154,11 @@ function loadName() {
 function parseNum(input, fallback) {
   const n = Number(input);
   return Number.isFinite(n) ? Math.floor(n) : fallback;
+}
+
+function clampInt(v, min, max) {
+  if (!Number.isFinite(v)) return min;
+  return Math.max(min, Math.min(max, Math.floor(v)));
 }
 
 function ensureConnected() {
@@ -428,133 +446,29 @@ function isMobileView() {
 }
 
 function getSeatLayout(maxPlayers, compact) {
-  const desktopLayouts = {
-    2: [
-      [50, 85],
-      [50, 15],
-    ],
-    3: [
-      [50, 86],
-      [80, 58],
-      [20, 58],
-    ],
-    4: [
-      [50, 86],
-      [84, 52],
-      [50, 14],
-      [16, 52],
-    ],
-    5: [
-      [50, 87],
-      [82, 66],
-      [72, 18],
-      [28, 18],
-      [18, 66],
-    ],
-    6: [
-      [50, 87],
-      [80, 68],
-      [80, 34],
-      [50, 14],
-      [20, 34],
-      [20, 68],
-    ],
-    7: [
-      [50, 87],
-      [78, 72],
-      [86, 48],
-      [70, 16],
-      [30, 16],
-      [14, 48],
-      [22, 72],
-    ],
-    8: [
-      [50, 88],
-      [72, 78],
-      [86, 60],
-      [86, 30],
-      [72, 12],
-      [28, 12],
-      [14, 30],
-      [14, 60],
-    ],
-    9: [
-      [50, 88],
-      [74, 80],
-      [88, 60],
-      [88, 34],
-      [74, 12],
-      [50, 8],
-      [26, 12],
-      [12, 34],
-      [12, 60],
-    ],
-  };
-  const mobileLayouts = {
-    2: [
-      [50, 86],
-      [50, 15],
-    ],
-    3: [
-      [50, 88],
-      [80, 62],
-      [20, 62],
-    ],
-    4: [
-      [50, 88],
-      [84, 54],
-      [50, 14],
-      [16, 54],
-    ],
-    5: [
-      [50, 89],
-      [80, 68],
-      [72, 16],
-      [28, 16],
-      [20, 68],
-    ],
-    6: [
-      [50, 90],
-      [80, 72],
-      [88, 46],
-      [68, 16],
-      [32, 16],
-      [12, 46],
-    ],
-    7: [
-      [50, 90],
-      [74, 82],
-      [88, 63],
-      [84, 34],
-      [60, 10],
-      [40, 10],
-      [12, 45],
-    ],
-    8: [
-      [50, 90],
-      [73, 82],
-      [88, 65],
-      [90, 40],
-      [74, 14],
-      [26, 14],
-      [10, 40],
-      [12, 65],
-    ],
-    9: [
-      [50, 90],
-      [72, 84],
-      [86, 68],
-      [89, 46],
-      [84, 24],
-      [50, 8],
-      [16, 24],
-      [11, 46],
-      [14, 68],
-    ],
-  };
+  const count = clampInt(maxPlayers, 2, 9);
+  const radiusX = compact ? 40 : 42;
+  const radiusY = compact ? 38 : 40;
+  const startDeg = 90;
+  const step = 360 / count;
+  const points = [];
+  for (let i = 0; i < count; i += 1) {
+    const angle = (startDeg - i * step) * (Math.PI / 180);
+    points.push([50 + radiusX * Math.cos(angle), 50 + radiusY * Math.sin(angle)]);
+  }
+  return points;
+}
 
-  const source = compact ? mobileLayouts : desktopLayouts;
-  return source[maxPlayers] || source[9];
+function seatNodePreset(maxPlayers, compact) {
+  const n = clampInt(maxPlayers, 2, 9);
+  if (compact) {
+    if (n >= 8) return { width: 92, height: 68, compact: true, dense: true };
+    if (n >= 6) return { width: 102, height: 74, compact: true, dense: false };
+    return { width: 114, height: 80, compact: true, dense: false };
+  }
+  if (n >= 8) return { width: 132, height: 92, compact: false, dense: true };
+  if (n >= 6) return { width: 148, height: 100, compact: false, dense: false };
+  return { width: 170, height: 116, compact: false, dense: false };
 }
 
 function labelsForCount(count) {
@@ -610,15 +524,30 @@ function renderSeatMap() {
   const compact = isMobileView();
   const layout = getSeatLayout(maxPlayers, compact);
   const posMap = buildPositionLabelMap();
+  const preset = seatNodePreset(maxPlayers, compact);
+
+  if (el.tableCanvas) {
+    const minHeight = compact
+      ? maxPlayers >= 8
+        ? 700
+        : 640
+      : maxPlayers >= 8
+        ? 760
+        : 700;
+    el.tableCanvas.style.minHeight = `${minHeight}px`;
+  }
 
   for (let seat = 1; seat <= maxPlayers; seat += 1) {
     const point = layout[seat - 1] || [50, 50];
     const p = players.find((x) => x.seat === seat);
 
     const node = document.createElement('div');
-    node.className = `seat-node${p ? '' : ' empty'}${p?.id === meId ? ' me' : ''}${compact ? ' compact' : ''}`;
+    node.className = `seat-node${p ? '' : ' empty'}${p?.id === meId ? ' me' : ''}${preset.compact ? ' compact' : ''}${preset.dense ? ' dense' : ''}`;
     node.style.left = `${point[0]}%`;
     node.style.top = `${point[1]}%`;
+    node.style.width = `${p ? preset.width : Math.max(68, Math.floor(preset.width * 0.66))}px`;
+    node.style.minHeight = `${p ? preset.height : Math.max(34, Math.floor(preset.height * 0.5))}px`;
+    node.style.zIndex = String((p?.id === meId ? 900 : 100) + Math.floor(point[1] * 10));
 
     if (!p) {
       node.textContent = compact ? `${seat}空位` : `${seat}号位 空位`;
@@ -792,23 +721,85 @@ function renderReplay() {
 }
 
 function renderResult() {
-  const result = roomState?.game?.result;
-  if (!result) {
+  const game = roomState?.game;
+  const result = game?.result;
+  if (!game?.finished && !result) {
     el.resultPanel.classList.add('hidden');
     el.resultPanel.innerHTML = '';
     return;
   }
 
-  const winners = (result.winners || [])
-    .map((w) => `${w.name || roomMemberName(w.playerId)} +${w.amount}${w.hand ? ` (${w.hand})` : ''}`)
-    .join(' | ');
-
-  const side = (result.sidePots || [])
-    .map((p, idx) => `池${idx + 1}: ${p.amount} -> ${(p.winners || []).map((id) => roomMemberName(id)).join('/')} ${p.handName ? `(${p.handName})` : ''}`)
+  const winners = result?.winners || [];
+  const winnerHtml = winners.length
+    ? winners
+        .map((w) => {
+          const name = w.name || roomMemberName(w.playerId);
+          return `<div class="result-winner"><span class="who">${name}</span><span class="gain">+${w.amount}</span><span class="hand">${w.hand || ''}</span></div>`;
+        })
+        .join('')
+    : '<div class="hint">本手无赢家信息</div>';
+  const side = (result?.sidePots || [])
+    .map((p, idx) => `边池${idx + 1}: ${p.amount} -> ${(p.winners || []).map((id) => roomMemberName(id)).join('/')} ${p.handName ? `(${p.handName})` : ''}`)
     .join('<br/>');
-
+  const canContinue = Boolean(roomState?.canStart);
+  const iAmHost = roomState?.hostId === meId;
+  const cta = canContinue
+    ? iAmHost
+      ? '<button id="nextHandBtn" class="btn primary">开始下一手</button>'
+      : '<p class="hint">等待房主开始下一手</p>'
+    : '<p class="hint">至少需要 2 名已准备玩家才能继续</p>';
   el.resultPanel.classList.remove('hidden');
-  el.resultPanel.innerHTML = `<h3>本手结算</h3><p class="hint">${winners || '-'}</p><p class="hint">${side || '-'}</p>`;
+  el.resultPanel.innerHTML = `<h3>本手结算</h3><div class="result-winners">${winnerHtml}</div><p class="hint">${side || '本手无边池分配'}</p><div class="result-cta">${cta}</div>`;
+  const nextHandBtn = $('nextHandBtn');
+  if (nextHandBtn) {
+    nextHandBtn.onclick = () => socket.emit('startHand');
+  }
+}
+
+function calcQuickRaiseTarget(actionState, ratio) {
+  if (!roomState?.game || !actionState) return null;
+  if (!(actionState.canBet || actionState.canRaise)) return null;
+  if (!Number.isFinite(ratio) || ratio <= 0) return null;
+
+  const pot = Math.max(0, roomState.game.potTotal || 0);
+  const currentBet = Math.max(0, roomState.game.currentBet || 0);
+  let target;
+
+  if (actionState.canBet) {
+    const byPot = Math.floor(pot * ratio);
+    target = Math.max(actionState.minBetTo, byPot || actionState.minBetTo);
+  } else {
+    const raiseBy = Math.max(1, Math.floor(pot * ratio));
+    target = Math.max(actionState.minRaiseTo, currentBet + raiseBy);
+  }
+
+  target = clampInt(target, 0, actionState.maxTo);
+  if (actionState.canRaise && target <= currentBet) return null;
+  return target;
+}
+
+function renderQuickRaiseButtons(actionState) {
+  const canQuick = Boolean(actionState && (actionState.canBet || actionState.canRaise));
+  el.quickRaiseBox.classList.toggle('hidden', !canQuick);
+  if (!canQuick) return;
+
+  quickRaiseButtons.forEach((btn) => {
+    const ratioKey = btn.dataset.potRatio || '';
+    const ratio = Number(ratioKey);
+    const label = quickRaiseLabelMap[ratioKey] || `${ratioKey}池`;
+    const target = calcQuickRaiseTarget(actionState, ratio);
+
+    if (!Number.isFinite(target) || target <= 0) {
+      btn.disabled = true;
+      btn.textContent = label;
+      btn.dataset.target = '';
+      return;
+    }
+
+    btn.disabled = false;
+    btn.textContent = `${label} ${target}`;
+    btn.dataset.target = String(target);
+  });
 }
 
 function renderActions() {
@@ -823,6 +814,7 @@ function renderActions() {
   if (actionState.mode === 'straddle') {
     el.normalActionBox.classList.add('hidden');
     el.straddleBox.classList.remove('hidden');
+    el.quickRaiseBox.classList.add('hidden');
 
     el.actionInfo.textContent = `你可以选择 straddle。最小到 ${actionState.minStraddleTo}，最大到 ${actionState.maxTo}`;
     el.straddleInput.min = String(actionState.minStraddleTo);
@@ -860,6 +852,7 @@ function renderActions() {
 
   el.betInput.max = String(actionState.maxTo);
   el.betBtn.disabled = !(actionState.canBet || actionState.canRaise);
+  renderQuickRaiseButtons(actionState);
 }
 
 function renderStatus() {
@@ -871,8 +864,12 @@ function renderStatus() {
   el.roomModeText.textContent = `${roomState?.settings?.mode || 'NLH'} · ${roomState?.myRole === 'spectator' ? '观战中' : '玩家'} · ${roomState?.settings?.tournamentMode ? '锦标赛' : '现金桌'}`;
 
   el.phaseText.textContent = g ? phaseLabel(g.phase) : '等待开局';
-  el.potText.textContent = String(g?.potTotal || 0);
-  el.betText.textContent = String(g?.currentBet || 0);
+  const potTotal = g?.potTotal || 0;
+  const currentBet = g?.currentBet || 0;
+  el.potText.textContent = String(potTotal);
+  el.potHeroText.textContent = String(potTotal);
+  el.betText.textContent = String(currentBet);
+  el.betHeroText.textContent = String(currentBet);
   el.turnText.textContent = roomMemberName(g?.turnId) || '-';
 
   el.dealerText.textContent = `庄家 ${roomMemberName(g?.dealerId)}`;
@@ -888,6 +885,7 @@ function renderStatus() {
   }
 
   const me = roomPlayerById(meId);
+  el.myStackText.textContent = me ? String(me.stack) : '-';
   el.readyBtn.textContent = me?.ready ? '取消准备' : '准备';
 
   const isHost = roomState.hostId === meId;
@@ -895,6 +893,7 @@ function renderStatus() {
 
   el.readyBtn.disabled = !isPlayer;
   el.startBtn.disabled = !(roomState.canStart && isHost && isPlayer);
+  el.startBtn.textContent = g?.finished ? '开始下一手' : '房主开局';
 
   el.takeSeatBtn.classList.toggle('hidden', !roomState.canTakeSeat);
   el.becomeSpectatorBtn.classList.toggle('hidden', !roomState.canBecomeSpectator);
@@ -905,8 +904,21 @@ function renderStatus() {
   const turnSec = g?.turnDeadlineAt ? Math.max(0, Math.ceil((g.turnDeadlineAt - Date.now()) / 1000)) : null;
   el.turnTimerText.textContent = turnSec === null ? '--' : `${turnSec}s`;
 
-  const expiredText = roomState.sessionExpired ? '房间时长已到，不能再开始新手牌。' : '';
-  showNotice(el.tableNotice, expiredText);
+  let tableTip = '';
+  let tipTone = 'info';
+  if (roomState.sessionExpired) {
+    tableTip = '房间时长已到，不能再开始新手牌。';
+    tipTone = 'error';
+  } else if (g?.finished) {
+    if (roomState.canStart) {
+      tableTip = isHost ? '本手结束，点击“开始下一手”即可继续。' : '本手结束，等待房主开始下一手。';
+      tipTone = 'ok';
+    } else {
+      tableTip = '本手结束，至少 2 名已准备玩家才能继续。';
+      tipTone = 'error';
+    }
+  }
+  showNotice(el.tableNotice, tableTip, tipTone);
 
   const canEdit = isHost && (!roomState.game || roomState.game.finished);
   el.saveConfigBtn.disabled = !canEdit;
@@ -1178,6 +1190,17 @@ el.betBtn.addEventListener('click', () => {
   if (!roomState?.actionState) return;
   const action = roomState.actionState.canBet ? 'bet' : 'raise';
   socket.emit('playerAction', { action, amount });
+});
+
+quickRaiseButtons.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    if (!roomState?.actionState || btn.disabled) return;
+    const target = parseNum(btn.dataset.target, 0);
+    if (!target) return;
+    el.betInput.value = String(target);
+    const action = roomState.actionState.canBet ? 'bet' : 'raise';
+    socket.emit('playerAction', { action, amount: target });
+  });
 });
 
 el.straddleBtn.addEventListener('click', () => {

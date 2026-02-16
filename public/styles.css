@@ -400,11 +400,17 @@ input[type='checkbox'] {
   margin-bottom: 10px;
 }
 
-.status-row > div {
+.status-cell {
   background: rgba(0, 0, 0, 0.28);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   padding: 8px;
+}
+
+.status-pot,
+.status-stack {
+  border-color: rgba(232, 187, 97, 0.45);
+  background: linear-gradient(160deg, rgba(61, 44, 19, 0.45), rgba(0, 0, 0, 0.35));
 }
 
 .label {
@@ -415,6 +421,12 @@ input[type='checkbox'] {
 .value {
   margin-top: 3px;
   font-weight: 700;
+}
+
+.value-main {
+  font-size: 22px;
+  line-height: 1;
+  color: #ffe9b2;
 }
 
 .blind-row {
@@ -428,7 +440,7 @@ input[type='checkbox'] {
 
 .table-canvas {
   position: relative;
-  min-height: 680px;
+  min-height: 700px;
   margin-top: 10px;
   margin-bottom: 14px;
 }
@@ -448,12 +460,43 @@ input[type='checkbox'] {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 8px;
+}
+
+.pot-center {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(232, 187, 97, 0.55);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 8px 14px;
+  color: #ffe4a2;
+  font-size: 12px;
+}
+
+.pot-center strong {
+  font-size: 24px;
+  line-height: 1;
+  color: #fff2ce;
+}
+
+.pot-center small {
+  color: #d7e9d6;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.pot-center small em {
+  color: #fff2ce;
+  font-style: normal;
+  font-weight: 700;
 }
 
 .table-center-title {
   color: var(--gold-2);
   font-size: 13px;
-  margin-bottom: 6px;
+  margin-bottom: 2px;
 }
 
 .board-cards {
@@ -478,6 +521,10 @@ input[type='checkbox'] {
   transform: translate(-50%, -50%);
 }
 
+.seat-node.dense {
+  padding: 6px;
+}
+
 .seat-node.empty {
   display: flex;
   align-items: center;
@@ -497,11 +544,17 @@ input[type='checkbox'] {
   font-weight: 700;
   font-size: 13px;
   margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .seat-sub {
   font-size: 11px;
   color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .seat-cards {
@@ -515,6 +568,20 @@ input[type='checkbox'] {
   height: 40px;
   border-radius: 8px;
   font-size: 12px;
+}
+
+.seat-node.dense .seat-head {
+  font-size: 12px;
+}
+
+.seat-node.dense .seat-sub {
+  font-size: 10px;
+}
+
+.seat-node.dense .seat-cards .card-face {
+  width: 24px;
+  height: 34px;
+  font-size: 10px;
 }
 
 .cards {
@@ -615,6 +682,54 @@ input[type='checkbox'] {
   padding: 10px;
 }
 
+.quick-raise {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.quick-raise .btn {
+  min-width: 0;
+  font-weight: 600;
+}
+
+.result-winners {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.result-winner {
+  display: grid;
+  grid-template-columns: 1.4fr auto 1.2fr;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  padding: 7px 9px;
+}
+
+.result-winner .who {
+  font-weight: 700;
+}
+
+.result-winner .gain {
+  font-weight: 700;
+  color: #ffe5ab;
+}
+
+.result-winner .hand {
+  color: var(--muted);
+  text-align: right;
+  font-size: 12px;
+}
+
+.result-cta {
+  margin-top: 10px;
+}
+
 .hint {
   margin: 0 0 8px;
   color: var(--muted);
@@ -685,7 +800,7 @@ input[type='checkbox'] {
   }
 
   .table-canvas {
-    min-height: 800px;
+    min-height: 760px;
   }
 
   .table-oval {
@@ -810,12 +925,25 @@ input[type='checkbox'] {
   }
 
   .table-canvas {
-    min-height: 620px;
+    min-height: 660px;
   }
 
   .table-oval {
     width: 98%;
-    height: 200px;
+    height: 220px;
+  }
+
+  .pot-center {
+    gap: 6px;
+    padding: 6px 10px;
+  }
+
+  .pot-center strong {
+    font-size: 19px;
+  }
+
+  .value-main {
+    font-size: 19px;
   }
 
   .table-center-title {
@@ -834,10 +962,12 @@ input[type='checkbox'] {
   }
 
   .seat-node {
-    width: 120px;
-    min-height: 88px;
     padding: 6px;
     border-radius: 10px;
+  }
+
+  .seat-node.dense .badges {
+    margin: 2px 0;
   }
 
   .seat-node.compact .mini-actions {
@@ -897,6 +1027,20 @@ input[type='checkbox'] {
     flex: 1 1 calc(50% - 8px);
     min-width: 0;
     padding: 11px 8px;
+  }
+
+  .quick-raise {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .result-winner {
+    grid-template-columns: 1fr auto;
+  }
+
+  .result-winner .hand {
+    grid-column: 1 / -1;
+    text-align: left;
+    margin-top: -2px;
   }
 
   input:not([type='checkbox']) {
