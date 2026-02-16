@@ -422,6 +422,7 @@
                 <option value="memory">翻牌冲刺（各玩各的）</option>
                 <option value="draw">你画我猜</option>
                 <option value="quiz">快问快答</option>
+                <option value="rotate">游戏轮换（翻牌→你画我猜→快问快答）</option>
               </select>
             </label>
             <label>
@@ -487,13 +488,15 @@
       const GAME_LABEL = {
         quiz: '快问快答',
         memory: '翻牌冲刺',
-        draw: '你画我猜'
+        draw: '你画我猜',
+        rotate: '游戏轮换'
       };
 
       const GAME_LIMITS = {
         quiz: { roundsMin: 3, roundsMax: 12, secMin: 8, secMax: 25 },
         memory: { roundsMin: 1, roundsMax: 8, secMin: 10, secMax: 45 },
-        draw: { roundsMin: 1, roundsMax: 12, secMin: 20, secMax: 120 }
+        draw: { roundsMin: 1, roundsMax: 12, secMin: 20, secMax: 120 },
+        rotate: { roundsMin: 3, roundsMax: 18, secMin: 10, secMax: 60 }
       };
 
       const MEMORY_SYMBOLS = ['福', '春', '喜', '财', '旺', '安'];
@@ -596,6 +599,16 @@
         if (stage === 'playing') return '游戏进行中';
         if (stage === 'result') return '本局已结束';
         return stage || '-';
+      }
+
+      function activeGameType(room) {
+        if (!room || !room.game) return null;
+        return room.game.currentGameType || room.game.type || null;
+      }
+
+      function activeGameLabel(room) {
+        if (!room || !room.game) return '-';
+        return room.game.currentGameLabel || room.game.label || GAME_LABEL[activeGameType(room)] || '-';
       }
 
       function openLobby() {
@@ -816,7 +829,7 @@
       function canPlayMemory() {
         if (!roomState || !roomState.room || !roomState.room.game) return false;
         const room = roomState.room;
-        return room.stage === 'playing' && room.game.type === 'memory' && room.game.phase === 'memory_play';
+        return room.stage === 'playing' && activeGameType(room) === 'memory' && room.game.phase === 'memory_play';
       }
 
       function pushMemoryScore(force) {
@@ -932,11 +945,11 @@
       }
 
       function isDrawer(room) {
-        return Boolean(room && room.game && room.game.type === 'draw' && room.game.drawerId === selfId);
+        return Boolean(room && room.game && activeGameType(room) === 'draw' && room.game.drawerId === selfId);
       }
 
       function canDrawNow(room) {
-        return room && room.stage === 'playing' && room.game && room.game.type === 'draw' && room.game.phase === 'draw_play' && isDrawer(room);
+        return room && room.stage === 'playing' && room.game && activeGameType(room) === 'draw' && room.game.phase === 'draw_play' && isDrawer(room);
       }
 
       function renderDraw(room) {
@@ -987,11 +1000,12 @@
           return;
         }
 
-        if (room.game.type === 'quiz') {
+        const kind = activeGameType(room);
+        if (kind === 'quiz') {
           renderQuiz(room);
           return;
         }
-        if (room.game.type === 'memory') {
+        if (kind === 'memory') {
           renderMemory(room);
           return;
         }
@@ -1011,7 +1025,9 @@
         roomTitle.textContent = room.title;
         stageTag.textContent = stageText(room.stage);
         hostText.textContent = '房主：' + room.hostName;
-        gameText.textContent = '游戏：' + (room.setup ? room.setup.selectedGameLabel : '-');
+        const setupLabel = room.setup ? room.setup.selectedGameLabel : '-';
+        const currentLabel = room.stage === 'playing' ? activeGameLabel(room) : null;
+        gameText.textContent = currentLabel ? ('游戏：' + setupLabel + ' · 当前回合：' + currentLabel) : ('游戏：' + setupLabel);
 
         if (room.game) {
           roundText.textContent = '回合：' + room.game.roundNo + '/' + room.game.totalRounds;
@@ -1038,9 +1054,10 @@
         if (room.stage === 'lobby') {
           setHint('room', amHost ? '房主请先设置游戏，再点击开始。' : '等待房主配置并开始。', '');
         } else if (room.stage === 'playing') {
-          if (room.game.type === 'quiz') {
+          const kind = activeGameType(room);
+          if (kind === 'quiz') {
             setHint('room', me && me.answered ? '已作答，等待其他玩家...' : '请选择一个选项提交答案。', '');
-          } else if (room.game.type === 'memory') {
+          } else if (kind === 'memory') {
             setHint('room', '翻牌冲刺中：每个人在自己手机上尽快刷分。', '');
           } else {
             setHint('room', '你画我猜进行中。', '');
@@ -1150,7 +1167,7 @@
       backLobbyBtn.addEventListener('click', backToRoomLobby);
 
       memoryResetBtn.addEventListener('click', () => {
-        if (!roomState || !roomState.room || !roomState.room.game || roomState.room.game.type !== 'memory') return;
+        if (!roomState || !roomState.room || !roomState.room.game || activeGameType(roomState.room) !== 'memory') return;
         if (roomState.room.game.phase !== 'memory_play') return;
         initMemoryBoard(roomState.room.code + ':' + roomState.room.game.roundNo + ':' + roomState.room.game.phase + ':manual');
       });
@@ -1228,13 +1245,13 @@
 
       socket.on('partyDrawWord', (payload = {}) => {
         drawSecretWord = String(payload.word || '');
-        if (roomState && roomState.room && roomState.room.game && roomState.room.game.type === 'draw') {
+        if (roomState && roomState.room && roomState.room.game && activeGameType(roomState.room) === 'draw') {
           renderDraw(roomState.room);
         }
       });
 
       socket.on('partyDrawStroke', (payload = {}) => {
-        if (!roomState || !roomState.room || !roomState.room.game || roomState.room.game.type !== 'draw') return;
+        if (!roomState || !roomState.room || !roomState.room.game || activeGameType(roomState.room) !== 'draw') return;
         drawLine(payload);
       });
 

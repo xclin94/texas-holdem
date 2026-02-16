@@ -11,13 +11,17 @@ const GAME_TYPES = Object.freeze({
   QUIZ: 'quiz',
   MEMORY: 'memory',
   DRAW: 'draw',
+  ROTATE: 'rotate',
 });
 
 const GAME_LABELS = Object.freeze({
   [GAME_TYPES.QUIZ]: '快问快答',
   [GAME_TYPES.MEMORY]: '翻牌冲刺',
   [GAME_TYPES.DRAW]: '你画我猜',
+  [GAME_TYPES.ROTATE]: '游戏轮换',
 });
+
+const ROTATE_ORDER = Object.freeze([GAME_TYPES.MEMORY, GAME_TYPES.DRAW, GAME_TYPES.QUIZ]);
 
 const DEFAULT_SETUP = Object.freeze({
   selectedGame: GAME_TYPES.MEMORY,
@@ -99,7 +103,7 @@ function sanitizeRoomTitle(name) {
 
 function sanitizeGameType(value) {
   const v = String(value || '').trim().toLowerCase();
-  if (v === GAME_TYPES.QUIZ || v === GAME_TYPES.MEMORY || v === GAME_TYPES.DRAW) {
+  if (v === GAME_TYPES.QUIZ || v === GAME_TYPES.MEMORY || v === GAME_TYPES.DRAW || v === GAME_TYPES.ROTATE) {
     return v;
   }
   return DEFAULT_SETUP.selectedGame;
@@ -112,6 +116,7 @@ function normalizeSetup(payload = {}, base = DEFAULT_SETUP) {
     [GAME_TYPES.QUIZ]: { roundsMin: 3, roundsMax: 12, secMin: 8, secMax: 25 },
     [GAME_TYPES.MEMORY]: { roundsMin: 1, roundsMax: 8, secMin: 10, secMax: 45 },
     [GAME_TYPES.DRAW]: { roundsMin: 1, roundsMax: 12, secMin: 20, secMax: 120 },
+    [GAME_TYPES.ROTATE]: { roundsMin: 3, roundsMax: 18, secMin: 10, secMax: 60 },
   };
 
   const l = limits[selectedGame];
@@ -238,16 +243,37 @@ function emitLobby() {
   io.emit('partyLobby', buildLobbyPayload());
 }
 
+function currentGameType(game) {
+  if (!game) return null;
+  return game.type === GAME_TYPES.ROTATE ? game.currentType : game.type;
+}
+
+function gameTypeForRound(game, roundIndex) {
+  if (!game) return null;
+  if (game.type !== GAME_TYPES.ROTATE) return game.type;
+  const order = game.rotateOrder && game.rotateOrder.length ? game.rotateOrder : ROTATE_ORDER;
+  return order[roundIndex % order.length];
+}
+
 function buildSharedGameState(room) {
   if (!room.game) return null;
 
   const g = room.game;
-  if (g.type === GAME_TYPES.QUIZ) {
+  const activeType = currentGameType(g) || g.type;
+  const modeType = g.type === GAME_TYPES.ROTATE ? GAME_TYPES.ROTATE : g.type;
+  const modeLabel = gameLabel(modeType);
+  const currentLabel = gameLabel(activeType);
+
+  if (activeType === GAME_TYPES.QUIZ) {
     const reveal = g.phase === 'quiz_reveal';
     const q = g.questions[g.roundIndex] || null;
     return {
-      type: g.type,
-      label: gameLabel(g.type),
+      type: activeType,
+      label: currentLabel,
+      modeType,
+      modeLabel,
+      currentGameType: activeType,
+      currentGameLabel: currentLabel,
       phase: g.phase,
       roundNo: g.roundIndex + 1,
       totalRounds: g.totalRounds,
@@ -258,10 +284,14 @@ function buildSharedGameState(room) {
     };
   }
 
-  if (g.type === GAME_TYPES.MEMORY) {
+  if (activeType === GAME_TYPES.MEMORY) {
     return {
-      type: g.type,
-      label: gameLabel(g.type),
+      type: activeType,
+      label: currentLabel,
+      modeType,
+      modeLabel,
+      currentGameType: activeType,
+      currentGameLabel: currentLabel,
       phase: g.phase,
       roundNo: g.roundIndex + 1,
       totalRounds: g.totalRounds,
@@ -271,8 +301,12 @@ function buildSharedGameState(room) {
 
   const drawer = room.players.find((p) => p.id === g.drawerId);
   return {
-    type: g.type,
-    label: gameLabel(g.type),
+    type: activeType,
+    label: currentLabel,
+    modeType,
+    modeLabel,
+    currentGameType: activeType,
+    currentGameLabel: currentLabel,
     phase: g.phase,
     roundNo: g.roundIndex + 1,
     totalRounds: g.totalRounds,
@@ -352,14 +386,16 @@ function leaveRoom(socket, silent = false) {
   }
 
   if (room.stage === 'playing' && room.game) {
-    if (room.game.type === GAME_TYPES.QUIZ && room.game.phase === 'quiz_question') {
+    const activeType = currentGameType(room.game);
+
+    if (activeType === GAME_TYPES.QUIZ && room.game.phase === 'quiz_question') {
       if (room.players.every((p) => p.answered)) {
         finalizeQuizRound(room.code);
         return;
       }
     }
 
-    if (room.game.type === GAME_TYPES.DRAW && room.game.phase === 'draw_play') {
+    if (activeType === GAME_TYPES.DRAW && room.game.phase === 'draw_play') {
       if (room.game.drawerId === socket.id) {
         finalizeDrawRound(room.code, true);
         return;
@@ -402,9 +438,43 @@ function buildQuizQuestions(count) {
   return out;
 }
 
+function startRoundByType(room, roundIndex, type) {
+  if (type === GAME_TYPES.QUIZ) {
+    startQuizRound(room, roundIndex);
+    return;
+  }
+  if (type === GAME_TYPES.MEMORY) {
+    startMemoryRound(room, roundIndex);
+    return;
+  }
+  startDrawRound(room, roundIndex);
+}
+
+function advanceRoundOrFinish(code) {
+  const room = rooms.get(code);
+  if (!room || room.stage !== 'playing' || !room.game) return;
+
+  const g = room.game;
+  const nextRound = g.roundIndex + 1;
+  if (nextRound >= g.totalRounds) {
+    finishGame(room);
+    return;
+  }
+
+  const nextType = gameTypeForRound(g, nextRound);
+  startRoundByType(room, nextRound, nextType);
+}
+
 function startQuizRound(room, roundIndex) {
   const g = room.game;
+  if (!Array.isArray(g.questions)) {
+    g.questions = [];
+  }
+  if (!g.questions[roundIndex]) {
+    g.questions[roundIndex] = makeQuizQuestion();
+  }
   g.roundIndex = roundIndex;
+  g.currentType = GAME_TYPES.QUIZ;
   g.phase = 'quiz_question';
   g.roundEndsAt = Date.now() + g.seconds * 1000;
   g.answers = new Map();
@@ -424,7 +494,7 @@ function startQuizRound(room, roundIndex) {
 
 function finalizeQuizRound(code) {
   const room = rooms.get(code);
-  if (!room || room.stage !== 'playing' || !room.game || room.game.type !== GAME_TYPES.QUIZ) return;
+  if (!room || room.stage !== 'playing' || !room.game || currentGameType(room.game) !== GAME_TYPES.QUIZ) return;
   const g = room.game;
   if (g.phase !== 'quiz_question') return;
 
@@ -460,18 +530,14 @@ function finalizeQuizRound(code) {
   emitRoom(room);
 
   room.timer = setTimeout(() => {
-    if (!rooms.has(code)) return;
-    if (g.roundIndex + 1 >= g.totalRounds) {
-      finishGame(room);
-      return;
-    }
-    startQuizRound(room, g.roundIndex + 1);
+    advanceRoundOrFinish(code);
   }, 2300);
 }
 
 function startMemoryRound(room, roundIndex) {
   const g = room.game;
   g.roundIndex = roundIndex;
+  g.currentType = GAME_TYPES.MEMORY;
   g.phase = 'memory_play';
   g.roundEndsAt = Date.now() + g.seconds * 1000;
 
@@ -490,7 +556,7 @@ function startMemoryRound(room, roundIndex) {
 
 function finalizeMemoryRound(code) {
   const room = rooms.get(code);
-  if (!room || room.stage !== 'playing' || !room.game || room.game.type !== GAME_TYPES.MEMORY) return;
+  if (!room || room.stage !== 'playing' || !room.game || currentGameType(room.game) !== GAME_TYPES.MEMORY) return;
   const g = room.game;
   if (g.phase !== 'memory_play') return;
 
@@ -505,12 +571,7 @@ function finalizeMemoryRound(code) {
   emitRoom(room);
 
   room.timer = setTimeout(() => {
-    if (!rooms.has(code)) return;
-    if (g.roundIndex + 1 >= g.totalRounds) {
-      finishGame(room);
-      return;
-    }
-    startMemoryRound(room, g.roundIndex + 1);
+    advanceRoundOrFinish(code);
   }, 1800);
 }
 
@@ -523,7 +584,19 @@ function normalizeGuess(text) {
 
 function startDrawRound(room, roundIndex) {
   const g = room.game;
+  const activePlayerIds = room.players.map((p) => p.id);
+  if (!Array.isArray(g.order) || !g.order.length) {
+    g.order = shuffle(activePlayerIds);
+  } else {
+    const active = new Set(activePlayerIds);
+    g.order = g.order.filter((id) => active.has(id));
+    if (!g.order.length) {
+      g.order = shuffle(activePlayerIds);
+    }
+  }
+
   g.roundIndex = roundIndex;
+  g.currentType = GAME_TYPES.DRAW;
   g.phase = 'draw_play';
   g.roundEndsAt = Date.now() + g.seconds * 1000;
   g.drawerId = g.order[roundIndex % g.order.length];
@@ -552,7 +625,7 @@ function startDrawRound(room, roundIndex) {
 
 function finalizeDrawRound(code, forceByDrawerLeave) {
   const room = rooms.get(code);
-  if (!room || room.stage !== 'playing' || !room.game || room.game.type !== GAME_TYPES.DRAW) return;
+  if (!room || room.stage !== 'playing' || !room.game || currentGameType(room.game) !== GAME_TYPES.DRAW) return;
   const g = room.game;
   if (g.phase !== 'draw_play') return;
 
@@ -571,12 +644,7 @@ function finalizeDrawRound(code, forceByDrawerLeave) {
   emitRoom(room);
 
   room.timer = setTimeout(() => {
-    if (!rooms.has(code)) return;
-    if (g.roundIndex + 1 >= g.totalRounds) {
-      finishGame(room);
-      return;
-    }
-    startDrawRound(room, g.roundIndex + 1);
+    advanceRoundOrFinish(code);
   }, 2600);
 }
 
@@ -591,9 +659,29 @@ function startGame(room) {
   resetPlayersForNewGame(room);
   const setup = room.setup;
 
-  if (setup.selectedGame === GAME_TYPES.QUIZ) {
+  if (setup.selectedGame === GAME_TYPES.ROTATE) {
+    room.game = {
+      type: GAME_TYPES.ROTATE,
+      currentType: null,
+      rotateOrder: [...ROTATE_ORDER],
+      totalRounds: setup.rounds,
+      seconds: setup.seconds,
+      roundIndex: 0,
+      phase: 'rotate_prepare',
+      roundEndsAt: null,
+      questions: [],
+      answers: new Map(),
+      order: shuffle(room.players.map((p) => p.id)),
+      drawerId: null,
+      word: '',
+      guessed: new Set(),
+      guesses: [],
+      drawerGain: 0,
+    };
+  } else if (setup.selectedGame === GAME_TYPES.QUIZ) {
     room.game = {
       type: GAME_TYPES.QUIZ,
+      currentType: GAME_TYPES.QUIZ,
       totalRounds: setup.rounds,
       seconds: setup.seconds,
       roundIndex: 0,
@@ -602,44 +690,37 @@ function startGame(room) {
       questions: buildQuizQuestions(setup.rounds),
       answers: new Map(),
     };
-    room.stage = 'playing';
-    emitLobby();
-    startQuizRound(room, 0);
-    return;
-  }
-
-  if (setup.selectedGame === GAME_TYPES.MEMORY) {
+  } else if (setup.selectedGame === GAME_TYPES.MEMORY) {
     room.game = {
       type: GAME_TYPES.MEMORY,
+      currentType: GAME_TYPES.MEMORY,
       totalRounds: setup.rounds,
       seconds: setup.seconds,
       roundIndex: 0,
       phase: 'memory_play',
       roundEndsAt: null,
     };
-    room.stage = 'playing';
-    emitLobby();
-    startMemoryRound(room, 0);
-    return;
+  } else {
+    room.game = {
+      type: GAME_TYPES.DRAW,
+      currentType: GAME_TYPES.DRAW,
+      totalRounds: setup.rounds,
+      seconds: setup.seconds,
+      roundIndex: 0,
+      phase: 'draw_play',
+      roundEndsAt: null,
+      order: shuffle(room.players.map((p) => p.id)),
+      drawerId: null,
+      word: '',
+      guessed: new Set(),
+      guesses: [],
+      drawerGain: 0,
+    };
   }
 
-  room.game = {
-    type: GAME_TYPES.DRAW,
-    totalRounds: setup.rounds,
-    seconds: setup.seconds,
-    roundIndex: 0,
-    phase: 'draw_play',
-    roundEndsAt: null,
-    order: shuffle(room.players.map((p) => p.id)),
-    drawerId: null,
-    word: '',
-    guessed: new Set(),
-    guesses: [],
-    drawerGain: 0,
-  };
   room.stage = 'playing';
   emitLobby();
-  startDrawRound(room, 0);
+  startRoundByType(room, 0, gameTypeForRound(room.game, 0));
 }
 
 io.on('connection', (socket) => {
@@ -816,7 +897,7 @@ io.on('connection', (socket) => {
 
   socket.on('partyAnswer', (payload = {}) => {
     const room = findRoomOfSocket(socket);
-    if (!room || room.stage !== 'playing' || !room.game || room.game.type !== GAME_TYPES.QUIZ) return;
+    if (!room || room.stage !== 'playing' || !room.game || currentGameType(room.game) !== GAME_TYPES.QUIZ) return;
     if (room.game.phase !== 'quiz_question') return;
 
     const player = room.players.find((p) => p.id === socket.id);
@@ -841,7 +922,7 @@ io.on('connection', (socket) => {
 
   socket.on('partyMemoryUpdate', (payload = {}) => {
     const room = findRoomOfSocket(socket);
-    if (!room || room.stage !== 'playing' || !room.game || room.game.type !== GAME_TYPES.MEMORY) return;
+    if (!room || room.stage !== 'playing' || !room.game || currentGameType(room.game) !== GAME_TYPES.MEMORY) return;
     if (room.game.phase !== 'memory_play') return;
 
     const player = room.players.find((p) => p.id === socket.id);
@@ -856,7 +937,7 @@ io.on('connection', (socket) => {
 
   socket.on('partyDrawStroke', (payload = {}) => {
     const room = findRoomOfSocket(socket);
-    if (!room || room.stage !== 'playing' || !room.game || room.game.type !== GAME_TYPES.DRAW) return;
+    if (!room || room.stage !== 'playing' || !room.game || currentGameType(room.game) !== GAME_TYPES.DRAW) return;
     if (room.game.phase !== 'draw_play') return;
     if (room.game.drawerId !== socket.id) return;
 
@@ -881,7 +962,7 @@ io.on('connection', (socket) => {
 
   socket.on('partyDrawClear', () => {
     const room = findRoomOfSocket(socket);
-    if (!room || room.stage !== 'playing' || !room.game || room.game.type !== GAME_TYPES.DRAW) return;
+    if (!room || room.stage !== 'playing' || !room.game || currentGameType(room.game) !== GAME_TYPES.DRAW) return;
     if (room.game.phase !== 'draw_play') return;
     if (room.game.drawerId !== socket.id) return;
 
@@ -890,7 +971,7 @@ io.on('connection', (socket) => {
 
   socket.on('partyDrawGuess', (payload = {}) => {
     const room = findRoomOfSocket(socket);
-    if (!room || room.stage !== 'playing' || !room.game || room.game.type !== GAME_TYPES.DRAW) return;
+    if (!room || room.stage !== 'playing' || !room.game || currentGameType(room.game) !== GAME_TYPES.DRAW) return;
     const g = room.game;
     if (g.phase !== 'draw_play') return;
 
