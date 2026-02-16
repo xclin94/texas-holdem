@@ -173,6 +173,68 @@ const quickRaiseLabelMap = {
   '1': '1池',
   '2': '2池',
 };
+const MOBILE_SEAT_LAYOUTS = {
+  2: [
+    [50, 84],
+    [50, 18],
+  ],
+  3: [
+    [50, 85],
+    [82, 40],
+    [18, 40],
+  ],
+  4: [
+    [50, 86],
+    [84, 50],
+    [50, 16],
+    [16, 50],
+  ],
+  5: [
+    [50, 87],
+    [84, 62],
+    [70, 24],
+    [30, 24],
+    [16, 62],
+  ],
+  6: [
+    [50, 88],
+    [86, 68],
+    [86, 34],
+    [50, 14],
+    [14, 34],
+    [14, 68],
+  ],
+  7: [
+    [50, 89],
+    [84, 74],
+    [92, 46],
+    [72, 21],
+    [28, 21],
+    [8, 46],
+    [16, 74],
+  ],
+  8: [
+    [50, 89],
+    [82, 79],
+    [94, 53],
+    [79, 26],
+    [50, 15],
+    [21, 26],
+    [6, 53],
+    [18, 79],
+  ],
+  9: [
+    [50, 89],
+    [78, 81],
+    [92, 63],
+    [88, 38],
+    [68, 20],
+    [32, 20],
+    [12, 38],
+    [8, 63],
+    [22, 81],
+  ],
+};
 
 function showNotice(target, msg, tone = 'info') {
   if (!msg) {
@@ -724,8 +786,12 @@ function isMobileView() {
 
 function getSeatLayout(maxPlayers, compact) {
   const count = clampInt(maxPlayers, 2, 9);
-  const radiusX = compact ? 40 : 42;
-  const radiusY = compact ? 38 : 40;
+  if (compact && MOBILE_SEAT_LAYOUTS[count]) {
+    return MOBILE_SEAT_LAYOUTS[count].map((p) => [p[0], p[1]]);
+  }
+
+  const radiusX = compact ? (count >= 8 ? 44 : 42) : count >= 8 ? 44 : 42;
+  const radiusY = compact ? (count >= 8 ? 40 : 38) : count >= 8 ? 42 : 40;
   const startDeg = 90;
   const step = 360 / count;
   const points = [];
@@ -740,13 +806,15 @@ function seatNodePreset(maxPlayers, compact) {
   const n = clampInt(maxPlayers, 2, 9);
   const forceCompact = uiSeatDensity === 'compact';
   if (compact) {
-    if (forceCompact) return { width: 90, height: 66, compact: true, dense: true };
-    if (n >= 8) return { width: 92, height: 68, compact: true, dense: true };
-    if (n >= 6) return { width: 102, height: 74, compact: true, dense: false };
-    return { width: 114, height: 80, compact: true, dense: false };
+    if (forceCompact) return { width: 72, height: 54, compact: true, dense: true };
+    if (n >= 9) return { width: 72, height: 54, compact: true, dense: true };
+    if (n >= 8) return { width: 76, height: 56, compact: true, dense: true };
+    if (n >= 7) return { width: 82, height: 60, compact: true, dense: true };
+    if (n >= 6) return { width: 88, height: 62, compact: true, dense: false };
+    return { width: 100, height: 70, compact: true, dense: false };
   }
-  if (forceCompact) return { width: 126, height: 88, compact: false, dense: true };
-  if (n >= 8) return { width: 132, height: 92, compact: false, dense: true };
+  if (forceCompact) return { width: 118, height: 84, compact: false, dense: true };
+  if (n >= 8) return { width: 124, height: 88, compact: false, dense: true };
   if (n >= 6) return { width: 148, height: 100, compact: false, dense: false };
   return { width: 170, height: 116, compact: false, dense: false };
 }
@@ -811,10 +879,10 @@ function renderSeatMap() {
   if (el.tableCanvas) {
     const minHeight = compact
       ? maxPlayers >= 8
-        ? 700
+        ? 760
         : 640
       : maxPlayers >= 8
-        ? 760
+        ? 800
         : 700;
     el.tableCanvas.style.minHeight = `${minHeight}px`;
   }
@@ -830,7 +898,7 @@ function renderSeatMap() {
     node.style.top = `${point[1]}%`;
     node.style.width = `${p ? preset.width : Math.max(68, Math.floor(preset.width * 0.66))}px`;
     node.style.minHeight = `${p ? preset.height : Math.max(34, Math.floor(preset.height * 0.5))}px`;
-    node.style.zIndex = String((p?.id === meId ? 900 : 100) + Math.floor(point[1] * 10));
+    node.style.zIndex = String((p?.id === meId ? 40 : 20) + Math.floor(point[1] / 10));
 
     if (!p) {
       node.textContent = compact ? `${seat}空位` : `${seat}号位 空位`;
@@ -845,27 +913,38 @@ function renderSeatMap() {
 
     const badges = document.createElement('div');
     badges.className = 'badges';
-    if (compact) addBadge(badges, pos, 'gold');
-    if (p.id === roomState.hostId) addBadge(badges, '房主', 'gold');
-    if (roomState.game?.turnId === p.id && !roomState.game?.finished) addBadge(badges, '行动中', 'ok');
-    if (p.ready) addBadge(badges, '已准备', 'ok');
-    if (p.folded) addBadge(badges, '弃牌', 'warn');
-    if (p.allIn) addBadge(badges, '全下');
-    if (!p.connected) addBadge(badges, '离线', 'warn');
+    const badgeLimit = compact ? 3 : 99;
+    const pushBadge = (text, klass = '') => {
+      if (badges.childElementCount >= badgeLimit) return;
+      addBadge(badges, text, klass);
+    };
+    if (compact) pushBadge(pos, 'gold');
+    if (p.id === roomState.hostId) pushBadge(compact ? '房' : '房主', 'gold');
+    if (roomState.game?.turnId === p.id && !roomState.game?.finished) pushBadge(compact ? '行动' : '行动中', 'ok');
+    if (!compact && p.ready) pushBadge('已准备', 'ok');
+    if (p.folded) pushBadge(compact ? '弃' : '弃牌', 'warn');
+    if (p.allIn) pushBadge('全下');
+    if (!p.connected) pushBadge('离线', 'warn');
 
     const sub = document.createElement('div');
     sub.className = 'seat-sub';
-    sub.textContent = compact
-      ? `后手 ${p.stack} · 投入 ${p.totalContribution}`
-      : `后手 ${p.stack} · 本轮 ${p.betThisStreet} · 总投入 ${p.totalContribution}`;
+    if (compact) {
+      const action = p.lastAction ? ` · ${p.lastAction}` : '';
+      sub.textContent = `后手 ${p.stack}${action}`;
+    } else {
+      sub.textContent = `后手 ${p.stack} · 本轮 ${p.betThisStreet} · 总投入 ${p.totalContribution}`;
+    }
 
-    const act = document.createElement('div');
-    act.className = 'seat-sub';
-    act.textContent = compact ? (p.lastAction || '') : (p.lastAction || '等待中');
+    const act = !compact ? document.createElement('div') : null;
+    if (act) {
+      act.className = 'seat-sub';
+      act.textContent = p.lastAction || '等待中';
+    }
 
     const cards = document.createElement('div');
     cards.className = 'seat-cards';
-    if (p.holeCards?.length) {
+    const showCompactCards = !compact || p.id === meId || roomState.game?.finished;
+    if (p.holeCards?.length && showCompactCards) {
       p.holeCards.forEach((c, idx) => {
         const card = cardNode(c, false, shouldAnimateSeatDeal ? 'deal-seat' : '');
         if (shouldAnimateSeatDeal) {
@@ -873,7 +952,7 @@ function renderSeatMap() {
         }
         cards.appendChild(card);
       });
-    } else if (p.inHand && !roomState.game?.finished) {
+    } else if (!compact && p.inHand && !roomState.game?.finished) {
       cards.appendChild(cardNode('XX', true));
       cards.appendChild(cardNode('XX', true));
     }
@@ -881,8 +960,8 @@ function renderSeatMap() {
     node.appendChild(head);
     node.appendChild(badges);
     node.appendChild(sub);
-    node.appendChild(act);
-    if (!compact || cards.children.length > 0) {
+    if (act) node.appendChild(act);
+    if (cards.children.length > 0) {
       node.appendChild(cards);
     }
 
@@ -1209,12 +1288,15 @@ function renderResult() {
     .map((p, idx) => `边池${idx + 1}: ${p.amount} -> ${(p.winners || []).map((id) => roomMemberName(id)).join('/')} ${p.handName ? `(${p.handName})` : ''}`)
     .join('<br/>');
   const canContinue = Boolean(roomState?.canStart);
+  const autoStartSec = roomState?.autoStartAt ? Math.max(0, Math.ceil((roomState.autoStartAt - Date.now()) / 1000)) : 0;
   const iAmHost = roomState?.hostId === meId;
-  const cta = canContinue
-    ? iAmHost
-      ? '<button id="nextHandBtn" class="btn primary">开始下一手</button>'
-      : '<p class="hint">等待房主开始下一手</p>'
-    : '<p class="hint">至少需要 2 名已准备玩家才能继续</p>';
+  const cta = autoStartSec > 0
+    ? `<p class="hint">下一手将在 ${autoStartSec}s 后自动开始</p>`
+    : canContinue
+      ? iAmHost
+        ? '<button id="nextHandBtn" class="btn primary">立即开始下一手</button>'
+        : '<p class="hint">等待房主开始下一手</p>'
+      : '<p class="hint">至少需要 2 名已准备玩家才能继续</p>';
   el.resultPanel.classList.remove('hidden');
   el.resultPanel.innerHTML = `<h3>本手结算</h3><div class="result-winners">${winnerHtml}</div><p class="hint">${side || '本手无边池分配'}</p><div class="result-cta">${cta}</div>`;
   const nextHandBtn = $('nextHandBtn');
@@ -1291,6 +1373,9 @@ function renderActions() {
   const cueToken = `${roomState?.game?.handNo || 0}-${roomState?.game?.phase || ''}-${roomState?.game?.turnId || ''}-${actionState.mode}`;
   if (cueToken !== trackedTurnCueToken) {
     trackedTurnCueToken = cueToken;
+    if (isMobileView() && uiActionPanelCollapsed) {
+      setActionPanelCollapsed(false, false);
+    }
     showHandBanner('轮到你行动', 'ok', 1000);
     playTurnCue();
   }
@@ -1376,7 +1461,12 @@ function renderStatus() {
   el.roomIdText.textContent = roomState?.roomId || '-';
   el.roomModeText.textContent = `${roomState?.settings?.mode || 'NLH'} · ${roomState?.myRole === 'spectator' ? '观战中' : '玩家'} · ${roomState?.settings?.tournamentMode ? '锦标赛' : '现金桌'}`;
 
-  el.phaseText.textContent = g ? phaseLabel(g.phase) : '等待开局';
+  const autoStartSec = roomState?.autoStartAt ? Math.max(0, Math.ceil((roomState.autoStartAt - Date.now()) / 1000)) : 0;
+  if (g?.finished && autoStartSec > 0) {
+    el.phaseText.textContent = `本手结束 · ${autoStartSec}s后自动下一手`;
+  } else {
+    el.phaseText.textContent = g ? phaseLabel(g.phase) : '等待开局';
+  }
   const potTotal = g?.potTotal || 0;
   const currentBet = g?.currentBet || 0;
   el.potText.textContent = String(potTotal);
@@ -1405,8 +1495,13 @@ function renderStatus() {
   const isPlayer = roomState.myRole === 'player';
 
   el.readyBtn.disabled = !isPlayer;
-  el.startBtn.disabled = !(roomState.canStart && isHost && isPlayer);
-  el.startBtn.textContent = g?.finished ? '开始下一手' : '房主开局';
+  const waitingAuto = Boolean(g?.finished && autoStartSec > 0);
+  el.startBtn.disabled = waitingAuto || !(roomState.canStart && isHost && isPlayer);
+  if (waitingAuto) {
+    el.startBtn.textContent = `自动发牌 ${autoStartSec}s`;
+  } else {
+    el.startBtn.textContent = g?.finished ? '开始下一手' : '房主开局';
+  }
 
   el.takeSeatBtn.classList.toggle('hidden', !roomState.canTakeSeat);
   el.becomeSpectatorBtn.classList.toggle('hidden', !roomState.canBecomeSpectator);
@@ -1423,8 +1518,11 @@ function renderStatus() {
     tableTip = '房间时长已到，不能再开始新手牌。';
     tipTone = 'error';
   } else if (g?.finished) {
-    if (roomState.canStart) {
-      tableTip = isHost ? '本手结束，点击“开始下一手”即可继续。' : '本手结束，等待房主开始下一手。';
+    if (autoStartSec > 0) {
+      tableTip = `本手结束，${autoStartSec}s 后自动开始下一手。`;
+      tipTone = 'ok';
+    } else if (roomState.canStart) {
+      tableTip = isHost ? '本手结束，可立即开始下一手。' : '本手结束，等待房主开始下一手。';
       tipTone = 'ok';
     } else {
       tableTip = '本手结束，至少 2 名已准备玩家才能继续。';

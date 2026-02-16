@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Holdem Room</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-bg"></div>
+    <main class="app">
+      <section id="lobbyView" class="view">
+        <header class="hero">
+          <div>
+            <h1>Holdem Room</h1>
+            <p>多人德州扑克 · 房间制 · 实时同步</p>
+          </div>
+          <div class="pill">No Limit Texas Hold'em</div>
+        </header>
+
+        <div id="notice" class="notice hidden"></div>
+
+        <div class="grid lobby-grid">
+          <article class="card lobby-actions">
+            <h2>开始游戏</h2>
+            <label>
+              你的昵称
+              <input id="nameInput" maxlength="16" placeholder="例如 Alice" />
+            </label>
+            <div class="lobby-primary-buttons">
+              <button id="openCreatePanelBtn" class="btn primary">创建房间</button>
+              <button id="openJoinPanelBtn" class="btn">加入房间</button>
+              <button id="refreshLobbyBtn" class="btn ghost">刷新大厅</button>
+            </div>
+
+            <section id="createPanel" class="lobby-panel hidden">
+              <div class="panel-head">
+                <h3>创建房间</h3>
+                <button id="closeCreatePanelBtn" class="btn tiny">关闭</button>
+              </div>
+              <div class="create-grid-basic">
+                <label>
+                  房间名
+                  <input id="createRoomNameInput" maxlength="24" placeholder="好友局" />
+                </label>
+                <label>
+                  房间密码（可选）
+                  <input id="createPasswordInput" maxlength="24" placeholder="留空无密码" />
+                </label>
+                <label>
+                  房间时长（分钟）
+                  <input id="createSessionInput" type="number" min="10" max="720" value="180" />
+                </label>
+                <label>
+                  最大人数
+                  <input id="createMaxPlayersInput" type="number" min="2" max="9" value="9" />
+                </label>
+              </div>
+              <details class="create-advanced">
+                <summary>高级玩法设置</summary>
+                <div class="create-grid-advanced">
+                  <label>
+                    起始筹码
+                    <input id="createStackInput" type="number" min="200" max="500000" value="2000" />
+                  </label>
+                  <label>
+                    小盲
+                    <input id="createSbInput" type="number" min="1" max="50000" value="10" />
+                  </label>
+                  <label>
+                    大盲
+                    <input id="createBbInput" type="number" min="2" max="100000" value="20" />
+                  </label>
+                  <label>
+                    每手行动时限（秒）
+                    <input id="createTurnInput" type="number" min="8" max="90" value="25" />
+                  </label>
+                  <label>
+                    盲注升级间隔（分钟）
+                    <input id="createBlindIntervalInput" type="number" min="1" max="120" value="15" />
+                  </label>
+                </div>
+                <div class="create-toggle-grid">
+                  <label class="check">
+                    <input id="createTournamentInput" type="checkbox" />
+                    锦标赛模式（盲注自动增长）
+                  </label>
+                  <label class="check">
+                    <input id="createStraddleInput" type="checkbox" checked />
+                    允许 straddle
+                  </label>
+                  <label class="check">
+                    <input id="createSpectatorInput" type="checkbox" checked />
+                    允许观战
+                  </label>
+                </div>
+              </details>
+              <button id="createBtn" class="btn primary">确认创建</button>
+            </section>
+
+            <section id="joinPanel" class="lobby-panel hidden">
+              <div class="panel-head">
+                <h3>加入房间</h3>
+                <button id="closeJoinPanelBtn" class="btn tiny">关闭</button>
+              </div>
+              <div class="create-grid-basic">
+                <label>
+                  房间号
+                  <input id="joinRoomInput" maxlength="6" placeholder="例如 AB12CD" />
+                </label>
+                <label>
+                  房间密码（可选）
+                  <input id="joinPasswordInput" maxlength="24" placeholder="有密码才需填写" />
+                </label>
+              </div>
+              <div class="join-toggle-grid">
+                <label class="check">
+                  <input id="joinSpectatorInput" type="checkbox" />
+                  以观战身份加入
+                </label>
+              </div>
+              <button id="joinBtn" class="btn primary">确认加入</button>
+            </section>
+          </article>
+
+          <article class="card">
+            <h2>大厅</h2>
+            <h3>开放房间</h3>
+            <div id="roomsList" class="rooms-list"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="tableView" class="view hidden">
+        <header class="room-top card">
+          <div class="room-main">
+            <h2 id="roomTitle">房间</h2>
+            <div class="hint-row">
+              <span>房间号：<strong id="roomIdText">-</strong></span>
+              <button id="copyRoomBtn" class="btn tiny">复制</button>
+              <span id="roomModeText">NLH</span>
+              <span id="sessionTimer">时长剩余 --:--</span>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button id="themeToggleBtn" class="btn ghost">主题：森林</button>
+            <button id="soundToggleBtn" class="btn ghost">提示音：开</button>
+            <button id="motionToggleBtn" class="btn ghost">动效：标准</button>
+            <button id="sideToggleBtn" class="btn ghost">收起边栏</button>
+            <button id="densityToggleBtn" class="btn ghost">紧凑视图</button>
+            <button id="focusMeBtn" class="btn ghost">定位我的座位</button>
+            <button id="takeSeatBtn" class="btn hidden">入座</button>
+            <button id="becomeSpectatorBtn" class="btn hidden">转观战</button>
+            <button id="readyBtn" class="btn">准备</button>
+            <button id="startBtn" class="btn primary">房主开局</button>
+            <button id="leaveBtn" class="btn danger">离开</button>
+          </div>
+        </header>
+
+        <div id="tableNotice" class="notice hidden"></div>
+
+        <div id="tableGrid" class="grid table-grid">
+          <article class="card felt">
+            <div id="handBanner" class="hand-banner hidden"></div>
+            <div class="status-row">
+              <div class="status-cell">
+                <div class="label">阶段</div>
+                <div id="phaseText" class="value">等待开局</div>
+              </div>
+              <div class="status-cell status-pot">
+                <div class="label">底池</div>
+                <div id="potText" class="value value-main">0</div>
+              </div>
+              <div class="status-cell">
+                <div class="label">当前注</div>
+                <div id="betText" class="value">0</div>
+              </div>
+              <div class="status-cell">
+                <div class="label">轮到</div>
+                <div id="turnText" class="value">-</div>
+              </div>
+              <div class="status-cell">
+                <div class="label">行动倒计时</div>
+                <div id="turnTimerText" class="value">--</div>
+              </div>
+              <div class="status-cell status-stack">
+                <div class="label">我的后手</div>
+                <div id="myStackText" class="value value-main">-</div>
+              </div>
+            </div>
+
+            <div class="blind-row">
+              <span id="dealerText">庄家 -</span>
+              <span id="sbText">SB -</span>
+              <span id="bbText">BB -</span>
+              <span id="blindText">盲注 10 / 20</span>
+              <span id="blindLevelText">级别 L1</span>
+              <span id="nextBlindText">下级别 --:--</span>
+            </div>
+
+            <section id="tableCanvas" class="table-canvas">
+              <div class="table-oval">
+                <div class="pot-center">
+                  <span>底池</span>
+                  <strong id="potHeroText">0</strong>
+                  <small>当前注 <em id="betHeroText">0</em></small>
+                </div>
+                <div class="table-center-title">公共牌</div>
+                <div id="communityCards" class="cards board-cards"></div>
+              </div>
+              <div id="seatMap" class="seat-map"></div>
+            </section>
+
+            <section id="actionPanel" class="action-panel hidden">
+              <div class="panel-title-row">
+                <h3>你的操作</h3>
+                <button id="actionPanelToggleBtn" class="btn tiny ghost">收起</button>
+              </div>
+              <p id="actionInfo" class="hint"></p>
+              <p id="actionMiniText" class="action-mini hidden"></p>
+
+              <div id="normalActionBox">
+                <div class="actions">
+                  <button id="foldBtn" class="btn danger">弃牌</button>
+                  <button id="checkBtn" class="btn">过牌</button>
+                  <button id="callBtn" class="btn">跟注</button>
+                  <button id="allinBtn" class="btn">全下</button>
+                </div>
+                <div class="field-row compact">
+                  <label>
+                    下注/加注到
+                    <input id="betInput" type="number" min="0" step="1" />
+                  </label>
+                  <button id="betBtn" class="btn primary">提交</button>
+                </div>
+                <div id="quickRaiseBox" class="quick-raise">
+                  <button class="btn tiny quick-raise-btn" data-pot-ratio="0.33">1/3池</button>
+                  <button class="btn tiny quick-raise-btn" data-pot-ratio="0.5">1/2池</button>
+                  <button class="btn tiny quick-raise-btn" data-pot-ratio="1">1池</button>
+                  <button class="btn tiny quick-raise-btn" data-pot-ratio="2">2池</button>
+                </div>
+              </div>
+
+              <div id="straddleBox" class="hidden">
+                <div class="field-row compact">
+                  <label>
+                    straddle 到
+                    <input id="straddleInput" type="number" min="0" step="1" />
+                  </label>
+                </div>
+                <div class="actions">
+                  <button id="straddleBtn" class="btn primary">执行 straddle</button>
+                  <button id="skipStraddleBtn" class="btn">跳过</button>
+                </div>
+              </div>
+            </section>
+
+            <section id="resultPanel" class="result-panel hidden"></section>
+          </article>
+
+          <aside id="sidePanel" class="card side">
+            <h3>房主配置</h3>
+            <div id="configBox" class="config-box">
+              <div class="field-row compact">
+                <label>
+                  房间名
+                  <input id="cfgRoomNameInput" maxlength="24" />
+                </label>
+                <label>
+                  密码（留空无）
+                  <input id="cfgPasswordInput" maxlength="24" />
+                </label>
+              </div>
+              <div class="field-row compact">
+                <label>
+                  起始筹码
+                  <input id="cfgStackInput" type="number" min="200" max="500000" />
+                </label>
+                <label>
+                  小盲
+                  <input id="cfgSbInput" type="number" min="1" max="50000" />
+                </label>
+                <label>
+                  大盲
+                  <input id="cfgBbInput" type="number" min="2" max="100000" />
+                </label>
+              </div>
+              <div class="field-row compact">
+                <label>
+                  最大人数
+                  <input id="cfgMaxPlayersInput" type="number" min="2" max="9" />
+                </label>
+                <label>
+                  行动时限（秒）
+                  <input id="cfgTurnInput" type="number" min="8" max="90" />
+                </label>
+                <label>
+                  房间时长（分钟）
+                  <input id="cfgSessionInput" type="number" min="10" max="720" />
+                </label>
+                <label>
+                  盲注升级间隔（分钟）
+                  <input id="cfgBlindIntervalInput" type="number" min="1" max="120" />
+                </label>
+              </div>
+              <div class="field-row compact">
+                <label class="check">
+                  <input id="cfgTournamentInput" type="checkbox" />
+                  锦标赛模式
+                </label>
+                <label class="check">
+                  <input id="cfgStraddleInput" type="checkbox" />
+                  允许 straddle
+                </label>
+                <label class="check">
+                  <input id="cfgSpectatorInput" type="checkbox" />
+                  允许观战
+                </label>
+              </div>
+              <button id="saveConfigBtn" class="btn">保存房间配置</button>
+            </div>
+
+            <h3>观战席</h3>
+            <div id="spectatorsList" class="spectators"></div>
+
+            <h3>桌上盈亏</h3>
+            <div id="statsList" class="stats-list"></div>
+
+            <h3>净值曲线</h3>
+            <div class="chart-wrap">
+              <div class="chart-filter">
+                <button id="profitFilterAllBtn" class="btn tiny">全部玩家</button>
+                <button id="profitFilterMeBtn" class="btn tiny">仅看我</button>
+              </div>
+              <svg id="profitChart" class="profit-chart" viewBox="0 0 360 170" preserveAspectRatio="none"></svg>
+              <div id="profitLegend" class="profit-legend"></div>
+            </div>
+
+            <h3>封禁列表</h3>
+            <div id="bannedList" class="spectators"></div>
+
+            <h3>战绩 / 回放</h3>
+            <div id="historyList" class="history-list"></div>
+            <div id="replayBox" class="result-panel hidden"></div>
+
+            <h3>日志 / 聊天</h3>
+            <div id="logs" class="logs logs-feed"></div>
+            <div class="field-row compact">
+              <input id="chatInput" maxlength="120" placeholder="输入聊天内容" />
+              <button id="sendChatBtn" class="btn">发送</button>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/client.js"></script>
+  </body>
+</html>

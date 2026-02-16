@@ -4,6 +4,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 
 const PORT = Number(process.env.HOLDEM_PORT || 3000);
+const AUTO_NEXT_HAND_DELAY_MS = 2200;
 
 const DEFAULT_SETTINGS = Object.freeze({
   startingStack: 2000,
@@ -24,6 +25,10 @@ let handCounter = 1;
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'holdem.html'));
+});
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -264,6 +269,15 @@ function clearActionTimer(room) {
   }
 }
 
+function clearAutoStartTimer(room) {
+  if (!room) return;
+  if (room.autoStartTimer) {
+    clearTimeout(room.autoStartTimer);
+    room.autoStartTimer = null;
+  }
+  room.autoStartAt = null;
+}
+
 function currentRoomOfSocket(socket) {
   const roomId = socket.data.roomId;
   if (!roomId) return null;
@@ -277,6 +291,31 @@ function roomCanStart(room) {
   if (roomIsExpired(room)) return false;
   const readyPlayers = room.players.filter((p) => p.ready && p.stack > 0 && p.connected);
   return readyPlayers.length >= 2;
+}
+
+function scheduleAutoNextHand(room) {
+  clearAutoStartTimer(room);
+  if (!room || !room.game || !room.game.finished) return;
+  if (!roomCanStart(room)) return;
+
+  room.autoStartAt = Date.now() + AUTO_NEXT_HAND_DELAY_MS;
+  room.autoStartTimer = setTimeout(() => {
+    room.autoStartTimer = null;
+    room.autoStartAt = null;
+    if (!rooms.has(room.id)) return;
+    if (!room.game || !room.game.finished) return;
+    if (!roomCanStart(room)) return;
+
+    if (!getPlayer(room, room.hostId)) {
+      room.hostId = room.players[0]?.id || room.hostId;
+    }
+    const requestedBy = room.hostId;
+    const r = startHand(room, requestedBy);
+    if (!r.ok) return;
+    logRoom(room, '自动开始下一手');
+    broadcastRoom(room);
+    broadcastLobby();
+  }, AUTO_NEXT_HAND_DELAY_MS);
 }
 
 function createDeck() {
@@ -568,6 +607,7 @@ function cleanupDisconnected(room) {
 
   if (room.players.length === 0 && room.spectators.length === 0) {
     clearActionTimer(room);
+    clearAutoStartTimer(room);
     rooms.delete(room.id);
   }
 }
@@ -607,6 +647,7 @@ function settleUncontested(room) {
   });
 
   cleanupDisconnected(room);
+  scheduleAutoNextHand(room);
 }
 
 function computeSidePots(room) {
@@ -665,6 +706,7 @@ function settleShowdown(room) {
     game.finished = true;
     setTurn(room, null);
     archiveFinishedHand(room);
+    scheduleAutoNextHand(room);
     return;
   }
 
@@ -750,6 +792,7 @@ function settleShowdown(room) {
   });
 
   cleanupDisconnected(room);
+  scheduleAutoNextHand(room);
 }
 
 function shouldSkipBetting(room) {
@@ -1068,6 +1111,7 @@ function handleTurnTimeout(roomId, handNo, turnId) {
 }
 
 function startHand(room, requestedBy) {
+  clearAutoStartTimer(room);
   if (room.hostId !== requestedBy) {
     return { ok: false, error: '只有房主可以开始牌局' };
   }
@@ -1355,6 +1399,7 @@ function serializeRoom(room, viewerId) {
     sessionEndsAt: room.sessionEndsAt,
     sessionExpired: roomIsExpired(room),
     sessionRemainSec: secondsLeft(room.sessionEndsAt),
+    autoStartAt: room.autoStartAt || null,
     players,
     spectators,
     logs: room.logs.slice(-80),
@@ -1635,6 +1680,8 @@ io.on('connection', (socket) => {
       sessionEndsAt: Date.now() + settings.sessionMinutes * 60 * 1000,
       sessionExpiredNotified: false,
       turnTimer: null,
+      autoStartTimer: null,
+      autoStartAt: null,
       handHistory: [],
       bannedNames: new Set(),
     };
