@@ -517,15 +517,15 @@ function playTurnCue() {
     const gain = audioCtx.createGain();
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(820, now);
-    osc.frequency.exponentialRampToValueAtTime(520, now + 0.14);
+    osc.frequency.exponentialRampToValueAtTime(520, now + 0.16);
     gain.gain.setValueAtTime(0.001, now);
-    gain.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
+    gain.gain.exponentialRampToValueAtTime(0.2, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.19);
     osc.connect(gain);
     gain.connect(audioCtx.destination);
     osc.start(now);
-    osc.stop(now + 0.18);
-    if (navigator.vibrate) navigator.vibrate(90);
+    osc.stop(now + 0.2);
+    if (navigator.vibrate) navigator.vibrate([35, 30, 45]);
   } catch {
     // Ignore autoplay/device limitations.
   }
@@ -544,28 +544,66 @@ function playActionCue(kind) {
     }
 
     const presets = {
-      check: { type: 'triangle', from: 420, to: 350, dur: 0.08, gain: 0.08 },
-      call: { type: 'triangle', from: 560, to: 480, dur: 0.1, gain: 0.1 },
-      raise: { type: 'sawtooth', from: 640, to: 900, dur: 0.11, gain: 0.11 },
-      bet: { type: 'sawtooth', from: 620, to: 860, dur: 0.11, gain: 0.11 },
-      fold: { type: 'triangle', from: 260, to: 190, dur: 0.1, gain: 0.07 },
-      allin: { type: 'square', from: 760, to: 1080, dur: 0.13, gain: 0.12 },
-      straddle: { type: 'square', from: 700, to: 980, dur: 0.12, gain: 0.12 },
+      check: {
+        tones: [{ type: 'triangle', from: 480, to: 400, dur: 0.09, gain: 0.12, delay: 0 }],
+        vibrate: 22,
+      },
+      call: {
+        tones: [{ type: 'triangle', from: 640, to: 520, dur: 0.11, gain: 0.14, delay: 0 }],
+        vibrate: [22, 20, 24],
+      },
+      raise: {
+        tones: [
+          { type: 'sawtooth', from: 700, to: 980, dur: 0.12, gain: 0.16, delay: 0 },
+          { type: 'sawtooth', from: 860, to: 1160, dur: 0.12, gain: 0.15, delay: 0.05 },
+        ],
+        vibrate: [28, 24, 36],
+      },
+      bet: {
+        tones: [
+          { type: 'sawtooth', from: 680, to: 940, dur: 0.11, gain: 0.15, delay: 0 },
+          { type: 'triangle', from: 820, to: 1040, dur: 0.1, gain: 0.13, delay: 0.045 },
+        ],
+        vibrate: [26, 22, 30],
+      },
+      fold: {
+        tones: [{ type: 'triangle', from: 300, to: 190, dur: 0.11, gain: 0.1, delay: 0 }],
+        vibrate: 18,
+      },
+      allin: {
+        tones: [
+          { type: 'square', from: 900, to: 1260, dur: 0.12, gain: 0.18, delay: 0 },
+          { type: 'square', from: 980, to: 1480, dur: 0.14, gain: 0.2, delay: 0.055 },
+        ],
+        vibrate: [42, 26, 56],
+      },
+      straddle: {
+        tones: [
+          { type: 'square', from: 780, to: 1120, dur: 0.12, gain: 0.16, delay: 0 },
+          { type: 'triangle', from: 900, to: 1220, dur: 0.11, gain: 0.14, delay: 0.045 },
+        ],
+        vibrate: [30, 20, 30],
+      },
     };
     const p = presets[kind] || presets.call;
     const now = audioCtx.currentTime;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = p.type;
-    osc.frequency.setValueAtTime(p.from, now);
-    osc.frequency.exponentialRampToValueAtTime(p.to, now + p.dur);
-    gain.gain.setValueAtTime(0.001, now);
-    gain.gain.exponentialRampToValueAtTime(p.gain, now + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + p.dur + 0.02);
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start(now);
-    osc.stop(now + p.dur + 0.03);
+    p.tones.forEach((tone) => {
+      const start = now + (tone.delay || 0);
+      const end = start + tone.dur + 0.03;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = tone.type;
+      osc.frequency.setValueAtTime(tone.from, start);
+      osc.frequency.exponentialRampToValueAtTime(tone.to, start + tone.dur);
+      gain.gain.setValueAtTime(0.001, start);
+      gain.gain.exponentialRampToValueAtTime(tone.gain, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + tone.dur + 0.02);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(start);
+      osc.stop(end);
+    });
+    if (navigator.vibrate && p.vibrate) navigator.vibrate(p.vibrate);
   } catch {
     // Ignore autoplay/device limitations.
   }
