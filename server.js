@@ -1909,6 +1909,9 @@ io.on('connection', (socket) => {
     const room = currentRoomOfSocket(socket);
     if (!room) return;
 
+    sendError(socket, '房间配置在创建后锁定，不支持修改');
+    return;
+
     if (room.hostId !== socket.id) {
       sendError(socket, '只有房主可以修改配置');
       return;

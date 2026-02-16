@@ -22,6 +22,7 @@ let uiActionPanelCollapsed = localStorage.getItem('holdem_action_collapsed')
   : window.innerWidth <= 760 || (window.innerWidth <= 960 && window.innerHeight <= 540);
 let uiMotionMode = localStorage.getItem('holdem_motion_mode') || 'full';
 let uiProfitFilter = localStorage.getItem('holdem_profit_filter') || 'all';
+let uiSideTab = localStorage.getItem('holdem_side_tab') || 'chips';
 let bannerTimer = null;
 let trackedHandNo = null;
 let trackedPhase = null;
@@ -164,6 +165,8 @@ const el = {
 };
 
 const quickRaiseButtons = Array.from(document.querySelectorAll('.quick-raise-btn'));
+const sideTabButtons = Array.from(document.querySelectorAll('.side-tab-btn'));
+const sidePanes = Array.from(document.querySelectorAll('.side-pane'));
 const THEME_CYCLE = ['forest', 'ocean', 'sunset'];
 const THEME_LABEL = {
   forest: '森林',
@@ -334,6 +337,26 @@ function refreshMotionButton() {
 function refreshSideButton() {
   if (!el.sideToggleBtn) return;
   el.sideToggleBtn.textContent = uiSideCollapsed ? '展开边栏' : '收起边栏';
+}
+
+function refreshSideTabs() {
+  const validTabs = new Set(['chips', 'chart', 'history', 'chat', 'config', 'admin']);
+  if (!validTabs.has(uiSideTab)) uiSideTab = 'chips';
+  sideTabButtons.forEach((btn) => {
+    const active = btn.dataset.sideTab === uiSideTab;
+    btn.classList.toggle('active', active);
+  });
+  sidePanes.forEach((pane) => {
+    pane.classList.toggle('active', pane.dataset.sidePane === uiSideTab);
+  });
+}
+
+function setSideTab(tab, persist = true) {
+  uiSideTab = tab || 'chips';
+  if (persist) {
+    localStorage.setItem('holdem_side_tab', uiSideTab);
+  }
+  refreshSideTabs();
 }
 
 function refreshActionPanelToggleButton() {
@@ -1652,24 +1675,19 @@ function renderStatus() {
   }
   showNotice(el.tableNotice, tableTip, tipTone);
 
-  const canEdit = isHost && (!roomState.game || roomState.game.finished);
-  el.saveConfigBtn.disabled = !canEdit;
-
-  if (!el.cfgRoomNameInput.dataset.init || canEdit) {
-    el.cfgRoomNameInput.value = roomState.roomName || '';
-    el.cfgPasswordInput.value = '';
-    el.cfgStackInput.value = String(roomState.settings.startingStack);
-    el.cfgSbInput.value = String(roomState.settings.smallBlind);
-    el.cfgBbInput.value = String(roomState.settings.bigBlind);
-    el.cfgMaxPlayersInput.value = String(roomState.settings.maxPlayers);
-    el.cfgTurnInput.value = String(roomState.settings.turnTimeSec);
-    el.cfgSessionInput.value = String(roomState.settings.sessionMinutes);
-    el.cfgBlindIntervalInput.value = String(roomState.settings.blindIntervalMinutes || 15);
-    el.cfgTournamentInput.checked = Boolean(roomState.settings.tournamentMode);
-    el.cfgStraddleInput.checked = Boolean(roomState.settings.allowStraddle);
-    el.cfgSpectatorInput.checked = Boolean(roomState.settings.allowSpectators);
-    el.cfgRoomNameInput.dataset.init = '1';
-  }
+  el.saveConfigBtn.disabled = true;
+  el.cfgRoomNameInput.value = roomState.roomName || '';
+  el.cfgPasswordInput.value = roomState.hasPassword ? '已设置（隐藏）' : '无';
+  el.cfgStackInput.value = String(roomState.settings.startingStack);
+  el.cfgSbInput.value = String(roomState.settings.smallBlind);
+  el.cfgBbInput.value = String(roomState.settings.bigBlind);
+  el.cfgMaxPlayersInput.value = String(roomState.settings.maxPlayers);
+  el.cfgTurnInput.value = String(roomState.settings.turnTimeSec);
+  el.cfgSessionInput.value = String(roomState.settings.sessionMinutes);
+  el.cfgBlindIntervalInput.value = String(roomState.settings.blindIntervalMinutes || 15);
+  el.cfgTournamentInput.checked = Boolean(roomState.settings.tournamentMode);
+  el.cfgStraddleInput.checked = Boolean(roomState.settings.allowStraddle);
+  el.cfgSpectatorInput.checked = Boolean(roomState.settings.allowSpectators);
 }
 
 function myDisplayName() {
@@ -1986,6 +2004,13 @@ el.sideToggleBtn.addEventListener('click', () => {
   showHandBanner(willCollapse ? '已收起边栏' : '已展开边栏', willCollapse ? 'info' : 'ok', 800);
 });
 
+sideTabButtons.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.sideTab || 'chips';
+    setSideTab(tab, true);
+  });
+});
+
 document.addEventListener('click', (evt) => {
   if (uiSideCollapsed || !useSideDrawerMode() || !roomState) return;
   const target = evt.target;
@@ -2118,8 +2143,8 @@ el.skipStraddleBtn.addEventListener('click', () => {
 });
 
 el.saveConfigBtn.addEventListener('click', () => {
-  if (!roomState) return;
-  socket.emit('updateRoomConfig', collectConfigSettings());
+  showNotice(el.tableNotice, '房间配置在创建后锁定，只支持查看', 'error');
+  setSideTab('config', true);
 });
 
 el.sendChatBtn.addEventListener('click', () => {
@@ -2162,6 +2187,7 @@ refreshSoundButton();
 refreshMotionButton();
 refreshDensityButton();
 refreshActionPanelToggleButton();
+refreshSideTabs();
 if (uiProfitFilter !== 'me' && uiProfitFilter !== 'all') uiProfitFilter = 'all';
 refreshProfitFilterButtons();
 applySideLayout();

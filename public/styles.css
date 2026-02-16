@@ -170,6 +170,32 @@ body.side-drawer-open {
   background: linear-gradient(180deg, rgba(10, 29, 20, 0.9), rgba(5, 18, 12, 0.95));
 }
 
+.side-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.side-tab-btn {
+  min-width: 0;
+  padding: 6px 8px;
+}
+
+.side-tab-btn.active {
+  border-color: rgba(232, 187, 97, 0.58);
+  background: rgba(232, 187, 97, 0.22);
+  color: #ffe8b4;
+}
+
+.side-pane {
+  display: none;
+}
+
+.side-pane.active {
+  display: block;
+}
+
 h2,
 h3 {
   margin: 0 0 10px;
@@ -1309,6 +1335,15 @@ input[type='checkbox'] {
     margin-bottom: 8px;
   }
 
+  .side-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .side-tab-btn {
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+
   .lobby-primary-buttons {
     grid-template-columns: 1fr;
     gap: 8px;
@@ -1592,6 +1627,10 @@ input[type='checkbox'] {
   .card {
     padding: 8px;
     border-radius: 12px;
+  }
+
+  .side-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .table-canvas {

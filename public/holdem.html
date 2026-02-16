@@ -267,99 +267,118 @@
           </article>
 
           <aside id="sidePanel" class="card side">
-            <h3>房主配置</h3>
-            <div id="configBox" class="config-box">
-              <div class="field-row compact">
-                <label>
-                  房间名
-                  <input id="cfgRoomNameInput" maxlength="24" />
-                </label>
-                <label>
-                  密码（留空无）
-                  <input id="cfgPasswordInput" maxlength="24" />
-                </label>
-              </div>
-              <div class="field-row compact">
-                <label>
-                  起始筹码
-                  <input id="cfgStackInput" type="number" min="200" max="500000" />
-                </label>
-                <label>
-                  小盲
-                  <input id="cfgSbInput" type="number" min="1" max="50000" />
-                </label>
-                <label>
-                  大盲
-                  <input id="cfgBbInput" type="number" min="2" max="100000" />
-                </label>
-              </div>
-              <div class="field-row compact">
-                <label>
-                  最大人数
-                  <input id="cfgMaxPlayersInput" type="number" min="2" max="9" />
-                </label>
-                <label>
-                  行动时限（秒）
-                  <input id="cfgTurnInput" type="number" min="8" max="90" />
-                </label>
-                <label>
-                  房间时长（分钟）
-                  <input id="cfgSessionInput" type="number" min="10" max="720" />
-                </label>
-                <label>
-                  盲注升级间隔（分钟）
-                  <input id="cfgBlindIntervalInput" type="number" min="1" max="120" />
-                </label>
-              </div>
-              <div class="field-row compact">
-                <label class="check">
-                  <input id="cfgTournamentInput" type="checkbox" />
-                  锦标赛模式
-                </label>
-                <label class="check">
-                  <input id="cfgStraddleInput" type="checkbox" />
-                  允许 straddle
-                </label>
-                <label class="check">
-                  <input id="cfgSpectatorInput" type="checkbox" />
-                  允许观战
-                </label>
-              </div>
-              <button id="saveConfigBtn" class="btn">保存房间配置</button>
+            <div class="side-tabs" id="sideTabs">
+              <button class="btn tiny side-tab-btn active" data-side-tab="chips">筹码</button>
+              <button class="btn tiny side-tab-btn" data-side-tab="chart">曲线</button>
+              <button class="btn tiny side-tab-btn" data-side-tab="history">战绩</button>
+              <button class="btn tiny side-tab-btn" data-side-tab="chat">聊天</button>
+              <button class="btn tiny side-tab-btn" data-side-tab="config">配置</button>
+              <button class="btn tiny side-tab-btn" data-side-tab="admin">管理</button>
             </div>
 
-            <h3>观战席</h3>
-            <div id="spectatorsList" class="spectators"></div>
+            <section class="side-pane active" data-side-pane="chips">
+              <h3>筹码榜（当前后手）</h3>
+              <div id="statsList" class="stats-list"></div>
+              <h3>上一手摘要</h3>
+              <div id="lastHandBox" class="history-item">暂无战绩</div>
+            </section>
 
-            <h3>筹码榜（当前后手）</h3>
-            <div id="statsList" class="stats-list"></div>
-
-            <h3>上一手摘要</h3>
-            <div id="lastHandBox" class="history-item">暂无战绩</div>
-
-            <h3>净值曲线</h3>
-            <div class="chart-wrap">
-              <div class="chart-filter">
-                <button id="profitFilterAllBtn" class="btn tiny">全部玩家</button>
-                <button id="profitFilterMeBtn" class="btn tiny">仅看我</button>
+            <section class="side-pane" data-side-pane="chart">
+              <h3>净值曲线</h3>
+              <div class="chart-wrap">
+                <div class="chart-filter">
+                  <button id="profitFilterAllBtn" class="btn tiny">全部玩家</button>
+                  <button id="profitFilterMeBtn" class="btn tiny">仅看我</button>
+                </div>
+                <svg id="profitChart" class="profit-chart" viewBox="0 0 360 170" preserveAspectRatio="none"></svg>
+                <div id="profitLegend" class="profit-legend"></div>
               </div>
-              <svg id="profitChart" class="profit-chart" viewBox="0 0 360 170" preserveAspectRatio="none"></svg>
-              <div id="profitLegend" class="profit-legend"></div>
-            </div>
+            </section>
 
-            <h3>封禁列表</h3>
-            <div id="bannedList" class="spectators"></div>
+            <section class="side-pane" data-side-pane="history">
+              <h3>战绩 / 回放</h3>
+              <div id="historyList" class="history-list"></div>
+              <div id="replayBox" class="result-panel hidden"></div>
+            </section>
 
-            <h3>战绩 / 回放</h3>
-            <div id="historyList" class="history-list"></div>
-            <div id="replayBox" class="result-panel hidden"></div>
+            <section class="side-pane" data-side-pane="chat">
+              <h3>日志 / 聊天</h3>
+              <div id="logs" class="logs logs-feed"></div>
+              <div class="field-row compact">
+                <input id="chatInput" maxlength="120" placeholder="输入聊天内容" />
+                <button id="sendChatBtn" class="btn">发送</button>
+              </div>
+            </section>
 
-            <h3>日志 / 聊天</h3>
-            <div id="logs" class="logs logs-feed"></div>
-            <div class="field-row compact">
-              <input id="chatInput" maxlength="120" placeholder="输入聊天内容" />
-              <button id="sendChatBtn" class="btn">发送</button>
-            </div>
+            <section class="side-pane" data-side-pane="config">
+              <h3>房间配置（只读）</h3>
+              <div id="configBox" class="config-box">
+                <div class="field-row compact">
+                  <label>
+                    房间名
+                    <input id="cfgRoomNameInput" maxlength="24" readonly />
+                  </label>
+                  <label>
+                    房间密码
+                    <input id="cfgPasswordInput" maxlength="24" readonly />
+                  </label>
+                </div>
+                <div class="field-row compact">
+                  <label>
+                    起始筹码
+                    <input id="cfgStackInput" type="number" min="200" max="500000" readonly />
+                  </label>
+                  <label>
+                    小盲
+                    <input id="cfgSbInput" type="number" min="1" max="50000" readonly />
+                  </label>
+                  <label>
+                    大盲
+                    <input id="cfgBbInput" type="number" min="2" max="100000" readonly />
+                  </label>
+                </div>
+                <div class="field-row compact">
+                  <label>
+                    最大人数
+                    <input id="cfgMaxPlayersInput" type="number" min="2" max="9" readonly />
+                  </label>
+                  <label>
+                    行动时限（秒）
+                    <input id="cfgTurnInput" type="number" min="8" max="90" readonly />
+                  </label>
+                  <label>
+                    房间时长（分钟）
+                    <input id="cfgSessionInput" type="number" min="10" max="720" readonly />
+                  </label>
+                  <label>
+                    盲注升级间隔（分钟）
+                    <input id="cfgBlindIntervalInput" type="number" min="1" max="120" readonly />
+                  </label>
+                </div>
+                <div class="field-row compact">
+                  <label class="check">
+                    <input id="cfgTournamentInput" type="checkbox" disabled />
+                    锦标赛模式
+                  </label>
+                  <label class="check">
+                    <input id="cfgStraddleInput" type="checkbox" disabled />
+                    允许 straddle
+                  </label>
+                  <label class="check">
+                    <input id="cfgSpectatorInput" type="checkbox" disabled />
+                    允许观战
+                  </label>
+                </div>
+                <button id="saveConfigBtn" class="btn" disabled>创建后不可修改</button>
+              </div>
+            </section>
+
+            <section class="side-pane" data-side-pane="admin">
+              <h3>观战席</h3>
+              <div id="spectatorsList" class="spectators"></div>
+              <h3>封禁列表</h3>
+              <div id="bannedList" class="spectators"></div>
+            </section>
           </aside>
         </div>
       </section>
