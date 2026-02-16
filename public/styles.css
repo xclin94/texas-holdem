@@ -353,6 +353,13 @@ input[type='checkbox'] {
   flex-wrap: wrap;
 }
 
+.panel-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
 .rooms-list {
   max-height: 460px;
   overflow: auto;
@@ -763,6 +770,22 @@ input[type='checkbox'] {
   padding: 10px;
 }
 
+.action-mini {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--gold-2);
+}
+
+.action-panel.collapsed #actionInfo,
+.action-panel.collapsed #normalActionBox,
+.action-panel.collapsed #straddleBox {
+  display: none !important;
+}
+
+.action-panel.collapsed .action-mini {
+  display: block !important;
+}
+
 .quick-raise {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -954,6 +977,77 @@ input[type='checkbox'] {
   margin-top: 4px;
   font-size: 11px;
   color: var(--muted);
+}
+
+.chart-wrap {
+  margin-bottom: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 8px;
+}
+
+.profit-chart {
+  width: 100%;
+  height: 170px;
+  border-radius: 8px;
+  background:
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px) 0 0 / 40px 100%,
+    linear-gradient(to top, rgba(255, 255, 255, 0.03) 1px, transparent 1px) 0 0 / 100% 34px;
+}
+
+.profit-axis {
+  stroke: rgba(255, 255, 255, 0.35);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.profit-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.profit-dot {
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.45));
+}
+
+.profit-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.legend-item.me {
+  border-color: rgba(232, 187, 97, 0.4);
+}
+
+.legend-item .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.legend-item .name {
+  color: var(--text);
+}
+
+.legend-item .val {
+  color: var(--gold-2);
+  font-weight: 700;
 }
 
 .logs {

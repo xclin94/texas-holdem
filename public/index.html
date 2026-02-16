@@ -215,8 +215,12 @@
             </section>
 
             <section id="actionPanel" class="action-panel hidden">
-              <h3>你的操作</h3>
+              <div class="panel-title-row">
+                <h3>你的操作</h3>
+                <button id="actionPanelToggleBtn" class="btn tiny ghost">收起</button>
+              </div>
               <p id="actionInfo" class="hint"></p>
+              <p id="actionMiniText" class="action-mini hidden"></p>
 
               <div id="normalActionBox">
                 <div class="actions">
@@ -324,6 +328,12 @@
 
             <h3>桌上盈亏</h3>
             <div id="statsList" class="stats-list"></div>
+
+            <h3>净值曲线</h3>
+            <div class="chart-wrap">
+              <svg id="profitChart" class="profit-chart" viewBox="0 0 360 170" preserveAspectRatio="none"></svg>
+              <div id="profitLegend" class="profit-legend"></div>
+            </div>
 
             <h3>封禁列表</h3>
             <div id="bannedList" class="spectators"></div>

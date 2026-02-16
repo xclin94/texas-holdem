@@ -1395,6 +1395,11 @@ function serializeRoom(room, viewerId) {
         endedAt: h.endedAt,
         blinds: h.blinds,
         winners: h.result?.winners || [],
+        stacksAfter: (h.players || []).map((p) => ({
+          playerId: p.playerId,
+          name: p.name,
+          stackAfter: p.stackAfter,
+        })),
       }))
       .reverse(),
     actionState: buildActionState(room, viewer),
@@ -1907,6 +1912,11 @@ io.on('connection', (socket) => {
           endedAt: h.endedAt,
           blinds: h.blinds,
           winners: h.result?.winners || [],
+          stacksAfter: (h.players || []).map((p) => ({
+            playerId: p.playerId,
+            name: p.name,
+            stackAfter: p.stackAfter,
+          })),
         }))
         .reverse(),
     });

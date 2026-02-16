@@ -17,6 +17,9 @@ let uiSoundEnabled = localStorage.getItem('holdem_sound') !== '0';
 let uiSideCollapsed = localStorage.getItem('holdem_side_collapsed')
   ? localStorage.getItem('holdem_side_collapsed') === '1'
   : window.innerWidth <= 1080;
+let uiActionPanelCollapsed = localStorage.getItem('holdem_action_collapsed')
+  ? localStorage.getItem('holdem_action_collapsed') === '1'
+  : window.innerWidth <= 760;
 let bannerTimer = null;
 let trackedHandNo = null;
 let trackedPhase = null;
@@ -26,6 +29,7 @@ let trackedCommunityCount = 0;
 let trackedSeatDealHandNo = null;
 let trackedTurnCueToken = null;
 let audioCtx = null;
+let swipeStart = null;
 
 const REQUEST_TIMEOUT_MS = 7000;
 const ACTION_PENDING_MS = 1200;
@@ -102,16 +106,21 @@ const el = {
   communityCards: $('communityCards'),
   handBanner: $('handBanner'),
   tableGrid: $('tableGrid'),
+  sidePanel: $('sidePanel'),
   tableCanvas: $('tableCanvas'),
   seatMap: $('seatMap'),
   spectatorsList: $('spectatorsList'),
   statsList: $('statsList'),
+  profitChart: $('profitChart'),
+  profitLegend: $('profitLegend'),
   bannedList: $('bannedList'),
   historyList: $('historyList'),
   replayBox: $('replayBox'),
 
   actionPanel: $('actionPanel'),
+  actionPanelToggleBtn: $('actionPanelToggleBtn'),
   actionInfo: $('actionInfo'),
+  actionMiniText: $('actionMiniText'),
   normalActionBox: $('normalActionBox'),
   quickRaiseBox: $('quickRaiseBox'),
   straddleBox: $('straddleBox'),
@@ -222,11 +231,84 @@ function refreshSideButton() {
   el.sideToggleBtn.textContent = uiSideCollapsed ? '展开边栏' : '收起边栏';
 }
 
+function refreshActionPanelToggleButton() {
+  if (!el.actionPanelToggleBtn) return;
+  el.actionPanelToggleBtn.textContent = uiActionPanelCollapsed ? '展开' : '收起';
+}
+
+function setSideCollapsed(next, persist = true) {
+  uiSideCollapsed = Boolean(next);
+  if (persist) {
+    localStorage.setItem('holdem_side_collapsed', uiSideCollapsed ? '1' : '0');
+  }
+  applySideLayout();
+}
+
 function applySideLayout() {
   if (!el.tableGrid || !el.sidePanel) return;
   el.tableGrid.classList.toggle('side-collapsed', uiSideCollapsed);
   el.sidePanel.classList.toggle('hidden', uiSideCollapsed);
   refreshSideButton();
+}
+
+function applyActionPanelCollapsed() {
+  if (!el.actionPanel) return;
+  el.actionPanel.classList.toggle('collapsed', uiActionPanelCollapsed);
+  refreshActionPanelToggleButton();
+}
+
+function bindMobileSwipeControls() {
+  if (!el.tableView) return;
+  el.tableView.addEventListener(
+    'touchstart',
+    (evt) => {
+      if (evt.touches.length !== 1) {
+        swipeStart = null;
+        return;
+      }
+      const raw = evt.target;
+      const target = raw && raw.nodeType === 1 ? raw : raw?.parentElement;
+      const ignore = Boolean(target && target.closest('button, input, textarea, select, a, .logs'));
+      const t = evt.touches[0];
+      swipeStart = {
+        x: t.clientX,
+        y: t.clientY,
+        ts: Date.now(),
+        ignore,
+      };
+    },
+    { passive: true },
+  );
+
+  el.tableView.addEventListener(
+    'touchend',
+    (evt) => {
+      if (!swipeStart || swipeStart.ignore || window.innerWidth > 1080) {
+        swipeStart = null;
+        return;
+      }
+      const elapsed = Date.now() - swipeStart.ts;
+      const t = evt.changedTouches?.[0];
+      if (!t || elapsed > 700) {
+        swipeStart = null;
+        return;
+      }
+
+      const dx = t.clientX - swipeStart.x;
+      const dy = t.clientY - swipeStart.y;
+      swipeStart = null;
+      if (Math.abs(dx) < 70 || Math.abs(dy) > 45) return;
+
+      if (dx < 0 && !uiSideCollapsed) {
+        setSideCollapsed(true, true);
+        showHandBanner('已收起边栏', 'info', 700);
+      } else if (dx > 0 && uiSideCollapsed) {
+        setSideCollapsed(false, true);
+        showHandBanner('已展开边栏', 'ok', 700);
+      }
+    },
+    { passive: true },
+  );
 }
 
 function playTurnCue() {
@@ -846,6 +928,118 @@ function renderStats() {
   });
 }
 
+function colorForSeries(i) {
+  const palette = ['#f7c873', '#7fd5ff', '#9ef5bf', '#ffb8ca', '#d8c9ff', '#ffdf94', '#7ce4d2', '#ff9f7f', '#a0b3ff'];
+  return palette[i % palette.length];
+}
+
+function renderProfitChart() {
+  if (!el.profitChart || !el.profitLegend) return;
+  const history = [...(roomState?.handHistory || [])].reverse();
+  el.profitChart.innerHTML = '';
+  el.profitLegend.innerHTML = '';
+
+  if (!history.length) {
+    el.profitLegend.textContent = '暂无可视化战绩';
+    return;
+  }
+
+  const hasStacks = history.some((h) => Array.isArray(h.stacksAfter) && h.stacksAfter.length);
+  if (!hasStacks) {
+    el.profitLegend.textContent = '新版本开始的手牌会显示净值曲线';
+    return;
+  }
+
+  const start = roomState?.settings?.startingStack || 0;
+  const xMin = 18;
+  const xMax = 348;
+  const yMin = 14;
+  const yMax = 150;
+
+  const seriesMap = new Map();
+  history.forEach((hand) => {
+    const items = hand.stacksAfter || [];
+    items.forEach((p) => {
+      if (!seriesMap.has(p.playerId)) {
+        seriesMap.set(p.playerId, {
+          playerId: p.playerId,
+          name: p.name || roomMemberName(p.playerId),
+          points: [],
+        });
+      }
+      seriesMap.get(p.playerId).points.push({
+        handNo: hand.handNo,
+        net: (p.stackAfter || 0) - start,
+      });
+    });
+  });
+
+  const series = [...seriesMap.values()].filter((s) => s.points.length >= 2);
+  if (!series.length) {
+    el.profitLegend.textContent = '至少两手历史后显示曲线';
+    return;
+  }
+
+  let minNet = 0;
+  let maxNet = 0;
+  const allHands = history.map((h) => h.handNo);
+  const firstHand = Math.min(...allHands);
+  const lastHand = Math.max(...allHands);
+  series.forEach((s) => {
+    s.points.forEach((p) => {
+      minNet = Math.min(minNet, p.net);
+      maxNet = Math.max(maxNet, p.net);
+    });
+  });
+
+  if (minNet === maxNet) {
+    minNet -= 1;
+    maxNet += 1;
+  }
+
+  const axisY = ((0 - minNet) / (maxNet - minNet)) * (yMax - yMin) + yMin;
+  const safeAxisY = Math.max(yMin, Math.min(yMax, axisY));
+  const axis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  axis.setAttribute('x1', String(xMin));
+  axis.setAttribute('x2', String(xMax));
+  axis.setAttribute('y1', String(safeAxisY));
+  axis.setAttribute('y2', String(safeAxisY));
+  axis.setAttribute('class', 'profit-axis');
+  el.profitChart.appendChild(axis);
+
+  const divisor = Math.max(1, lastHand - firstHand);
+  const scaleX = (handNo) => xMin + ((handNo - firstHand) / divisor) * (xMax - xMin);
+  const scaleY = (net) => yMax - ((net - minNet) / (maxNet - minNet)) * (yMax - yMin);
+
+  series.forEach((s, idx) => {
+    const color = colorForSeries(idx);
+    const pts = s.points
+      .map((p) => `${scaleX(p.handNo).toFixed(2)},${scaleY(p.net).toFixed(2)}`)
+      .join(' ');
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    line.setAttribute('points', pts);
+    line.setAttribute('fill', 'none');
+    line.setAttribute('stroke', color);
+    line.setAttribute('stroke-width', s.playerId === meId ? '3' : '2');
+    line.setAttribute('class', 'profit-line');
+    el.profitChart.appendChild(line);
+
+    const last = s.points[s.points.length - 1];
+    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    dot.setAttribute('cx', String(scaleX(last.handNo)));
+    dot.setAttribute('cy', String(scaleY(last.net)));
+    dot.setAttribute('r', s.playerId === meId ? '4' : '3');
+    dot.setAttribute('fill', color);
+    dot.setAttribute('class', 'profit-dot');
+    el.profitChart.appendChild(dot);
+
+    const legend = document.createElement('div');
+    legend.className = `legend-item${s.playerId === meId ? ' me' : ''}`;
+    legend.innerHTML = `<span class="swatch" style="background:${color}"></span><span class="name">${s.name}</span><span class="val">${last.net > 0 ? '+' : ''}${last.net}</span>`;
+    el.profitLegend.appendChild(legend);
+  });
+}
+
 function renderBanned() {
   el.bannedList.innerHTML = '';
   const host = roomState?.hostId === meId;
@@ -1033,6 +1227,7 @@ function renderActions() {
   if (!actionState) {
     setActionPending(false);
     el.actionPanel.classList.add('hidden');
+    el.actionMiniText.classList.add('hidden');
     return;
   }
 
@@ -1044,6 +1239,7 @@ function renderActions() {
   }
 
   el.actionPanel.classList.remove('hidden');
+  applyActionPanelCollapsed();
 
   if (actionState.mode === 'straddle') {
     el.normalActionBox.classList.add('hidden');
@@ -1054,6 +1250,8 @@ function renderActions() {
     el.straddleInput.min = String(actionState.minStraddleTo);
     el.straddleInput.max = String(actionState.maxTo);
     if (!el.straddleInput.value) el.straddleInput.value = String(actionState.defaultStraddleTo);
+    el.actionMiniText.textContent = `straddle ${actionState.minStraddleTo}-${actionState.maxTo}`;
+    el.actionMiniText.classList.toggle('hidden', !uiActionPanelCollapsed);
 
     el.straddleBtn.disabled = !actionState.canStraddle || actionPending;
     el.skipStraddleBtn.disabled = !actionState.canSkipStraddle || actionPending;
@@ -1064,6 +1262,8 @@ function renderActions() {
   el.straddleBox.classList.add('hidden');
 
   el.actionInfo.textContent = `需跟注 ${actionState.toCall} · 最小加注到 ${actionState.minRaiseTo} · 最大到 ${actionState.maxTo}`;
+  el.actionMiniText.textContent = `跟 ${actionState.toCall} / 最小 ${actionState.minRaiseTo}`;
+  el.actionMiniText.classList.toggle('hidden', !uiActionPanelCollapsed);
 
   el.foldBtn.disabled = actionPending;
   el.checkBtn.disabled = !actionState.canCheck || actionPending;
@@ -1275,6 +1475,7 @@ function renderRoom() {
   renderActions();
   renderResult();
   renderLogs();
+  renderProfitChart();
 }
 
 function emitJoinRequest({ roomId, name, password, spectator }) {
@@ -1384,6 +1585,7 @@ socket.on('handHistoryData', ({ items }) => {
   if (!roomState) return;
   roomState.handHistory = items || [];
   renderHistory();
+  renderProfitChart();
 });
 
 socket.on('handReplayData', (replay) => {
@@ -1493,9 +1695,14 @@ el.soundToggleBtn.addEventListener('click', () => {
 });
 
 el.sideToggleBtn.addEventListener('click', () => {
-  uiSideCollapsed = !uiSideCollapsed;
-  localStorage.setItem('holdem_side_collapsed', uiSideCollapsed ? '1' : '0');
-  applySideLayout();
+  setSideCollapsed(!uiSideCollapsed, true);
+});
+
+el.actionPanelToggleBtn.addEventListener('click', () => {
+  uiActionPanelCollapsed = !uiActionPanelCollapsed;
+  localStorage.setItem('holdem_action_collapsed', uiActionPanelCollapsed ? '1' : '0');
+  applyActionPanelCollapsed();
+  if (roomState) renderActions();
 });
 
 el.densityToggleBtn.addEventListener('click', () => {
@@ -1626,13 +1833,16 @@ window.addEventListener('resize', () => {
   if (roomState) renderRoom();
 });
 
+bindMobileSwipeControls();
 loadName();
 applyTheme();
 refreshPendingButtons();
 refreshThemeButton();
 refreshSoundButton();
 refreshDensityButton();
+refreshActionPanelToggleButton();
 applySideLayout();
+applyActionPanelCollapsed();
 (() => {
   const params = new URLSearchParams(window.location.search);
   const room = (params.get('room') || '').trim().toUpperCase();
