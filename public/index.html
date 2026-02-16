@@ -412,6 +412,7 @@
             <div class="row">
               <span id="stageTag" class="pill">等待开始</span>
               <button id="copyBtn" class="btn secondary">复制房间码</button>
+              <button id="copyLinkBtn" class="btn secondary">复制邀请链接</button>
               <button id="leaveBtn" class="btn secondary">离开房间</button>
             </div>
           </div>
@@ -530,6 +531,7 @@
       const roundText = document.getElementById('roundText');
       const timerText = document.getElementById('timerText');
       const copyBtn = document.getElementById('copyBtn');
+      const copyLinkBtn = document.getElementById('copyLinkBtn');
       const leaveBtn = document.getElementById('leaveBtn');
       const roomHint = document.getElementById('roomHint');
 
@@ -680,6 +682,26 @@
         }
 
         onFail();
+      }
+
+      function buildInviteLink(code) {
+        const safeCode = String(code || '').trim().toUpperCase();
+        return window.location.origin + '/?code=' + encodeURIComponent(safeCode);
+      }
+
+      function applyCodeFromQuery() {
+        let code = '';
+        try {
+          const params = new URLSearchParams(window.location.search || '');
+          code = String(params.get('code') || '').trim().toUpperCase();
+        } catch (_) {
+          code = '';
+        }
+
+        if (/^[A-Z0-9]{6}$/.test(code)) {
+          codeInput.value = code;
+          setHint('lobby', '已预填房间码：' + code, '');
+        }
       }
 
       function renderLobby() {
@@ -1035,6 +1057,13 @@
         const room = roomState.room;
         openRoom();
 
+        if (room.code) {
+          const target = '?code=' + encodeURIComponent(room.code);
+          if (window.location.search !== target) {
+            history.replaceState(null, '', target);
+          }
+        }
+
         roomCode.textContent = room.code;
         roomTitle.textContent = room.title;
         stageTag.textContent = stageText(room.stage);
@@ -1165,6 +1194,11 @@
         copyText(roomState.room.code);
       });
 
+      copyLinkBtn.addEventListener('click', () => {
+        if (!roomState || !roomState.room) return;
+        copyText(buildInviteLink(roomState.room.code));
+      });
+
       leaveBtn.addEventListener('click', () => {
         socket.emit('partyLeaveRoom');
         roomState = null;
@@ -1291,6 +1325,7 @@
       });
 
       loadName();
+      applyCodeFromQuery();
       nameInput.addEventListener('change', saveName);
       nameInput.addEventListener('blur', saveName);
       limitsText.textContent = gameLimitsText(gameSelect.value);
