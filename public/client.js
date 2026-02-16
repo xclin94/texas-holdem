@@ -13,6 +13,10 @@ let actionPending = false;
 let actionPendingTimer = null;
 let uiSeatDensity = localStorage.getItem('holdem_seat_density') || 'auto';
 let uiTheme = localStorage.getItem('holdem_theme') || 'forest';
+let uiSoundEnabled = localStorage.getItem('holdem_sound') !== '0';
+let uiSideCollapsed = localStorage.getItem('holdem_side_collapsed')
+  ? localStorage.getItem('holdem_side_collapsed') === '1'
+  : window.innerWidth <= 1080;
 let bannerTimer = null;
 let trackedHandNo = null;
 let trackedPhase = null;
@@ -20,6 +24,8 @@ let trackedResultHandNo = null;
 let trackedCommunityHandNo = null;
 let trackedCommunityCount = 0;
 let trackedSeatDealHandNo = null;
+let trackedTurnCueToken = null;
+let audioCtx = null;
 
 const REQUEST_TIMEOUT_MS = 7000;
 const ACTION_PENDING_MS = 1200;
@@ -68,6 +74,8 @@ const el = {
   copyRoomBtn: $('copyRoomBtn'),
 
   themeToggleBtn: $('themeToggleBtn'),
+  soundToggleBtn: $('soundToggleBtn'),
+  sideToggleBtn: $('sideToggleBtn'),
   densityToggleBtn: $('densityToggleBtn'),
   focusMeBtn: $('focusMeBtn'),
   takeSeatBtn: $('takeSeatBtn'),
@@ -93,9 +101,11 @@ const el = {
 
   communityCards: $('communityCards'),
   handBanner: $('handBanner'),
+  tableGrid: $('tableGrid'),
   tableCanvas: $('tableCanvas'),
   seatMap: $('seatMap'),
   spectatorsList: $('spectatorsList'),
+  statsList: $('statsList'),
   bannedList: $('bannedList'),
   historyList: $('historyList'),
   replayBox: $('replayBox'),
@@ -200,6 +210,50 @@ function applyTheme() {
 function refreshThemeButton() {
   if (!el.themeToggleBtn) return;
   el.themeToggleBtn.textContent = `主题：${THEME_LABEL[uiTheme] || '森林'}`;
+}
+
+function refreshSoundButton() {
+  if (!el.soundToggleBtn) return;
+  el.soundToggleBtn.textContent = `提示音：${uiSoundEnabled ? '开' : '关'}`;
+}
+
+function refreshSideButton() {
+  if (!el.sideToggleBtn) return;
+  el.sideToggleBtn.textContent = uiSideCollapsed ? '展开边栏' : '收起边栏';
+}
+
+function applySideLayout() {
+  if (!el.tableGrid || !el.sidePanel) return;
+  el.tableGrid.classList.toggle('side-collapsed', uiSideCollapsed);
+  el.sidePanel.classList.toggle('hidden', uiSideCollapsed);
+  refreshSideButton();
+}
+
+function playTurnCue() {
+  if (!uiSoundEnabled) return;
+  const AudioCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtor) return;
+  try {
+    if (!audioCtx || audioCtx.state === 'closed') {
+      audioCtx = new AudioCtor();
+    }
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(820, now);
+    osc.frequency.exponentialRampToValueAtTime(520, now + 0.14);
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(now);
+    osc.stop(now + 0.18);
+    if (navigator.vibrate) navigator.vibrate(90);
+  } catch {
+    // Ignore autoplay/device limitations.
+  }
 }
 
 function setActionPending(v) {
@@ -736,6 +790,62 @@ function renderSpectators() {
   });
 }
 
+function renderStats() {
+  el.statsList.innerHTML = '';
+  const players = roomState?.players || [];
+  if (!players.length) {
+    el.statsList.textContent = '暂无入座玩家';
+    return;
+  }
+
+  const base = Math.max(1, roomState?.settings?.startingStack || 1);
+  const rows = players
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      stack: p.stack,
+      net: p.stack - base,
+    }))
+    .sort((a, b) => b.net - a.net);
+  const maxAbs = Math.max(1, ...rows.map((r) => Math.abs(r.net)));
+
+  const summary = document.createElement('div');
+  summary.className = 'stats-summary';
+  summary.textContent = `已完成 ${roomState?.handHistory?.length || 0} 手`;
+  el.statsList.appendChild(summary);
+
+  rows.forEach((r) => {
+    const row = document.createElement('div');
+    row.className = `stat-row${r.id === meId ? ' me' : ''}`;
+
+    const top = document.createElement('div');
+    top.className = 'stat-top';
+    const name = document.createElement('span');
+    name.textContent = r.name;
+    const net = document.createElement('span');
+    net.className = r.net > 0 ? 'pos' : r.net < 0 ? 'neg' : 'zero';
+    net.textContent = `${r.net > 0 ? '+' : ''}${r.net}`;
+    top.appendChild(name);
+    top.appendChild(net);
+
+    const bar = document.createElement('div');
+    bar.className = 'stat-bar';
+    const fill = document.createElement('div');
+    fill.className = `fill ${r.net > 0 ? 'pos' : r.net < 0 ? 'neg' : 'zero'}`;
+    fill.style.width = `${Math.max(6, Math.round((Math.abs(r.net) / maxAbs) * 100))}%`;
+    bar.appendChild(fill);
+
+    const sub = document.createElement('div');
+    sub.className = 'stat-sub';
+    sub.textContent = `后手 ${r.stack}`;
+
+    row.appendChild(top);
+    row.appendChild(bar);
+    row.appendChild(sub);
+    el.statsList.appendChild(row);
+  });
+}
+
 function renderBanned() {
   el.bannedList.innerHTML = '';
   const host = roomState?.hostId === meId;
@@ -926,6 +1036,13 @@ function renderActions() {
     return;
   }
 
+  const cueToken = `${roomState?.game?.handNo || 0}-${roomState?.game?.phase || ''}-${roomState?.game?.turnId || ''}-${actionState.mode}`;
+  if (cueToken !== trackedTurnCueToken) {
+    trackedTurnCueToken = cueToken;
+    showHandBanner('轮到你行动', 'ok', 1000);
+    playTurnCue();
+  }
+
   el.actionPanel.classList.remove('hidden');
 
   if (actionState.mode === 'straddle') {
@@ -980,10 +1097,12 @@ function renderStatus() {
     trackedPhase = null;
     trackedResultHandNo = null;
     trackedSeatDealHandNo = null;
+    trackedTurnCueToken = null;
   } else {
     if (trackedHandNo !== g.handNo) {
       trackedHandNo = g.handNo;
       trackedPhase = g.phase;
+      trackedTurnCueToken = null;
       showHandBanner(`第 ${g.handNo} 手牌开始`, 'ok', 1300);
     } else if (!g.finished && trackedPhase !== g.phase) {
       trackedPhase = g.phase;
@@ -1149,6 +1268,7 @@ function renderRoom() {
   renderCommunity();
   renderSeatMap();
   renderSpectators();
+  renderStats();
   renderBanned();
   renderHistory();
   renderReplay();
@@ -1244,6 +1364,7 @@ socket.on('joinedRoom', ({ playerId }) => {
   trackedCommunityHandNo = null;
   trackedCommunityCount = 0;
   trackedSeatDealHandNo = null;
+  trackedTurnCueToken = null;
   meId = playerId;
   replayState = null;
   closeLobbyPanels();
@@ -1275,6 +1396,7 @@ socket.on('kicked', (payload) => {
   setActionPending(false);
   showHandBanner('');
   trackedSeatDealHandNo = null;
+  trackedTurnCueToken = null;
   showNotice(el.notice, payload?.reason || '你已被移出房间', 'error');
   roomState = null;
   replayState = null;
@@ -1363,6 +1485,19 @@ el.themeToggleBtn.addEventListener('click', () => {
   refreshThemeButton();
 });
 
+el.soundToggleBtn.addEventListener('click', () => {
+  uiSoundEnabled = !uiSoundEnabled;
+  localStorage.setItem('holdem_sound', uiSoundEnabled ? '1' : '0');
+  refreshSoundButton();
+  if (uiSoundEnabled) playTurnCue();
+});
+
+el.sideToggleBtn.addEventListener('click', () => {
+  uiSideCollapsed = !uiSideCollapsed;
+  localStorage.setItem('holdem_side_collapsed', uiSideCollapsed ? '1' : '0');
+  applySideLayout();
+});
+
 el.densityToggleBtn.addEventListener('click', () => {
   uiSeatDensity = uiSeatDensity === 'compact' ? 'auto' : 'compact';
   localStorage.setItem('holdem_seat_density', uiSeatDensity);
@@ -1389,6 +1524,7 @@ el.leaveBtn.addEventListener('click', () => {
   setActionPending(false);
   showHandBanner('');
   trackedSeatDealHandNo = null;
+  trackedTurnCueToken = null;
   socket.emit('leaveRoom');
   roomState = null;
   replayState = null;
@@ -1486,6 +1622,7 @@ setInterval(() => {
 }, 1000);
 
 window.addEventListener('resize', () => {
+  applySideLayout();
   if (roomState) renderRoom();
 });
 
@@ -1493,7 +1630,9 @@ loadName();
 applyTheme();
 refreshPendingButtons();
 refreshThemeButton();
+refreshSoundButton();
 refreshDensityButton();
+applySideLayout();
 (() => {
   const params = new URLSearchParams(window.location.search);
   const room = (params.get('room') || '').trim().toUpperCase();

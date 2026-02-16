@@ -148,6 +148,8 @@
 
           <div class="actions">
             <button id="themeToggleBtn" class="btn ghost">主题：森林</button>
+            <button id="soundToggleBtn" class="btn ghost">提示音：开</button>
+            <button id="sideToggleBtn" class="btn ghost">收起边栏</button>
             <button id="densityToggleBtn" class="btn ghost">紧凑视图</button>
             <button id="focusMeBtn" class="btn ghost">定位我的座位</button>
             <button id="takeSeatBtn" class="btn hidden">入座</button>
@@ -160,7 +162,7 @@
 
         <div id="tableNotice" class="notice hidden"></div>
 
-        <div class="grid table-grid">
+        <div id="tableGrid" class="grid table-grid">
           <article class="card felt">
             <div id="handBanner" class="hand-banner hidden"></div>
             <div class="status-row">
@@ -255,7 +257,7 @@
             <section id="resultPanel" class="result-panel hidden"></section>
           </article>
 
-          <aside class="card side">
+          <aside id="sidePanel" class="card side">
             <h3>房主配置</h3>
             <div id="configBox" class="config-box">
               <div class="field-row compact">
@@ -319,6 +321,9 @@
 
             <h3>观战席</h3>
             <div id="spectatorsList" class="spectators"></div>
+
+            <h3>桌上盈亏</h3>
+            <div id="statsList" class="stats-list"></div>
 
             <h3>封禁列表</h3>
             <div id="bannedList" class="spectators"></div>
