@@ -165,6 +165,33 @@ function fmtClock(sec) {
   return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
 }
 
+function fallbackCopy(text) {
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', 'true');
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  area.style.left = '-9999px';
+  document.body.appendChild(area);
+  area.focus();
+  area.select();
+  let ok = false;
+  try {
+    ok = document.execCommand('copy');
+  } catch {
+    ok = false;
+  }
+  document.body.removeChild(area);
+  return ok;
+}
+
+function getInviteLink() {
+  if (!roomState?.roomId) return '';
+  const url = new URL(window.location.href);
+  url.searchParams.set('room', roomState.roomId);
+  return url.toString();
+}
+
 function collectCreateSettings() {
   return {
     roomName: el.createRoomNameInput.value.trim(),
@@ -926,11 +953,22 @@ el.leaveBtn.addEventListener('click', () => {
 
 el.copyRoomBtn.addEventListener('click', async () => {
   if (!roomState?.roomId) return;
+  const text = roomState.roomId;
   try {
-    await navigator.clipboard.writeText(roomState.roomId);
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else if (!fallbackCopy(text)) {
+      throw new Error('copy-failed');
+    }
     showNotice(el.tableNotice, '房间号已复制');
   } catch {
-    showNotice(el.tableNotice, '复制失败，请手动复制');
+    const ok = fallbackCopy(text);
+    if (ok) {
+      showNotice(el.tableNotice, '房间号已复制');
+      return;
+    }
+    window.prompt('复制房间号（手动复制）', text);
+    showNotice(el.tableNotice, '当前浏览器限制复制，已弹出手动复制框');
   }
 });
 
@@ -986,4 +1024,12 @@ window.addEventListener('resize', () => {
 });
 
 loadName();
+(() => {
+  const params = new URLSearchParams(window.location.search);
+  const room = (params.get('room') || '').trim().toUpperCase();
+  if (room) {
+    el.joinRoomInput.value = room;
+    showNotice(el.notice, `已填入邀请房间号：${room}`);
+  }
+})();
 socket.emit('listRooms');
