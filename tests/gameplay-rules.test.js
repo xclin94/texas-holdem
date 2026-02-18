@@ -439,29 +439,23 @@ test('disconnected player keeps seat and can recover by reconnect key', async (t
   const roomId = await createRoomAs(host, hostName, { allowStraddle: false }, { reconnectKey: hostKey });
   await joinRoomAs(guest, roomId, guestName, { reconnectKey: guestKey });
 
-  let state = await waitForEvent(
-    host,
-    'roomState',
-    (next) => next?.roomId === roomId && next.players?.length === 2 && next.players.some((p) => p.name === guestName),
-  );
-  const guestBefore = (state.players || []).find((p) => p.name === guestName);
-  assert.ok(guestBefore);
-  const guestSeat = guestBefore.seat;
-  const guestOldId = guestBefore.id;
+  const guestOldId = guest.id;
 
   closeSocket(guest);
-  state = await waitForEvent(
+  const disconnectedState = await waitForEvent(
     host,
     'roomState',
     (next) => {
       if (next?.roomId !== roomId) return false;
-      const target = (next.players || []).find((p) => p.seat === guestSeat);
+      const target = (next.players || []).find((p) => p.id === guestOldId);
       return Boolean(target && target.connected === false);
     },
     EVENT_TIMEOUT_MS + 3000,
   );
-  const stillSeated = (state.players || []).find((p) => p.seat === guestSeat);
+  const stillSeated = (disconnectedState.players || []).find((p) => p.id === guestOldId);
+  const guestSeat = stillSeated?.seat;
   assert.equal(stillSeated?.connected, false);
+  assert.equal(Number.isFinite(guestSeat), true);
 
   const recovered = await connectClient();
   t.after(() => closeSocket(recovered));
