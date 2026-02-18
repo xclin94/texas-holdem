@@ -4,7 +4,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 
 const PORT = Number(process.env.HOLDEM_PORT || 3000);
-const AUTO_NEXT_HAND_DELAY_MS = 2200;
+const AUTO_NEXT_HAND_DELAY_MS = 4500;
 
 const DEFAULT_SETTINGS = Object.freeze({
   startingStack: 2000,
@@ -248,9 +248,28 @@ function resetHandFlags(player) {
 }
 
 function initPlayer(player, startingStack) {
+  if (!Number.isFinite(player.rebuyCount)) player.rebuyCount = 0;
+  if (!Number.isFinite(player.rebuyTotal)) player.rebuyTotal = 0;
   player.ready = true;
   player.stack = startingStack;
   resetHandFlags(player);
+}
+
+function performRebuy(room, player, source = 'manual') {
+  if (!room || !player) return { ok: false, error: '玩家不存在' };
+  if (player.stack > 0) return { ok: false, error: '当前仍有筹码，无需重新买入' };
+  if (room.game && !room.game.finished && player.inHand && !player.folded) {
+    return { ok: false, error: '当前手牌未结束，暂不能重新买入' };
+  }
+
+  const amount = room.settings.startingStack;
+  player.stack += amount;
+  player.ready = true;
+  player.rebuyCount = (Number(player.rebuyCount) || 0) + 1;
+  player.rebuyTotal = (Number(player.rebuyTotal) || 0) + amount;
+  player.lastAction = '重新买入';
+  logRoom(room, `${player.name} 重新买入 ${amount}${source === 'auto' ? '（自动）' : ''}`);
+  return { ok: true, amount };
 }
 
 function reassignHost(room) {
@@ -1370,6 +1389,8 @@ function serializeRoom(room, viewerId) {
         name: p.name,
         seat: p.seat,
         stack: p.stack,
+        rebuyCount: Number(p.rebuyCount) || 0,
+        rebuyTotal: Number(p.rebuyTotal) || 0,
         ready: p.ready,
         inHand: p.inHand,
         folded: p.folded,
@@ -1906,12 +1927,39 @@ io.on('connection', (socket) => {
     }
 
     if (player.stack <= 0) {
-      player.stack = room.settings.startingStack;
-      logRoom(room, `${player.name} 重新买入 ${room.settings.startingStack}`);
+      const rb = performRebuy(room, player, 'auto');
+      if (!rb.ok) {
+        sendError(socket, rb.error);
+        return;
+      }
+      logRoom(room, `${player.name} 已准备`);
+      broadcastRoom(room);
+      broadcastLobby();
+      return;
     }
 
     player.ready = !player.ready;
     logRoom(room, `${player.name} ${player.ready ? '已准备' : '取消准备'}`);
+    broadcastRoom(room);
+    broadcastLobby();
+  });
+
+  socket.on('rebuy', () => {
+    const room = currentRoomOfSocket(socket);
+    if (!room) return;
+
+    const player = getPlayer(room, socket.id);
+    if (!player) {
+      sendError(socket, '观战者无法重新买入');
+      return;
+    }
+
+    const rb = performRebuy(room, player, 'manual');
+    if (!rb.ok) {
+      sendError(socket, rb.error);
+      return;
+    }
+
     broadcastRoom(room);
     broadcastLobby();
   });

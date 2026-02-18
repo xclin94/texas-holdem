@@ -29,6 +29,10 @@ let trackedPhase = null;
 let trackedResultHandNo = null;
 let trackedCommunityHandNo = null;
 let trackedCommunityCount = 0;
+let communityVisibleCards = [];
+let communityTargetCards = [];
+let communityRevealTimer = null;
+let communityRevealKnown = false;
 let trackedSeatDealHandNo = null;
 let trackedTurnCueToken = null;
 let raiseUiExpanded = false;
@@ -47,6 +51,7 @@ let potPushCleanupTimer = null;
 const REQUEST_TIMEOUT_MS = 7000;
 const ACTION_PENDING_MS = 1200;
 const LOCAL_CUE_ECHO_MS = 1400;
+const COMMUNITY_REVEAL_GAP_MS = 500;
 
 const $ = (id) => document.getElementById(id);
 
@@ -102,6 +107,7 @@ const el = {
   takeSeatBtn: $('takeSeatBtn'),
   becomeSpectatorBtn: $('becomeSpectatorBtn'),
   readyBtn: $('readyBtn'),
+  rebuyBtn: $('rebuyBtn'),
   startBtn: $('startBtn'),
   leaveBtn: $('leaveBtn'),
 
@@ -1204,22 +1210,83 @@ function renderLobbyRooms() {
   });
 }
 
-function renderCommunity() {
+function clearCommunityRevealTimer() {
+  if (communityRevealTimer) {
+    clearTimeout(communityRevealTimer);
+    communityRevealTimer = null;
+  }
+}
+
+function resetCommunityRevealState(handNo = null) {
+  clearCommunityRevealTimer();
+  trackedCommunityHandNo = handNo;
+  trackedCommunityCount = 0;
+  communityVisibleCards = [];
+  communityTargetCards = [];
+  communityRevealKnown = false;
+}
+
+function drawCommunityBoard(animateFrom = -1) {
   el.communityCards.innerHTML = '';
+  communityVisibleCards.forEach((c, idx) => {
+    const animate = animateFrom >= 0 && idx >= animateFrom;
+    el.communityCards.appendChild(cardNode(c, false, animate ? 'deal-in' : ''));
+  });
+  for (let i = communityVisibleCards.length; i < 5; i += 1) {
+    el.communityCards.appendChild(cardNode('XX', true));
+  }
+}
+
+function scheduleCommunityReveal() {
+  if (communityRevealTimer) return;
+  if (communityVisibleCards.length >= communityTargetCards.length) return;
+
+  const delay = communityVisibleCards.length > 0 ? COMMUNITY_REVEAL_GAP_MS : 0;
+  communityRevealTimer = setTimeout(() => {
+    communityRevealTimer = null;
+    const idx = communityVisibleCards.length;
+    const nextCard = communityTargetCards[idx];
+    if (!nextCard) return;
+    communityVisibleCards.push(nextCard);
+    drawCommunityBoard(idx);
+    scheduleCommunityReveal();
+  }, delay);
+}
+
+function renderCommunity() {
   const cards = roomState?.game?.community || [];
   const handNo = roomState?.game?.handNo || null;
   if (handNo !== trackedCommunityHandNo) {
-    trackedCommunityHandNo = handNo;
-    trackedCommunityCount = 0;
+    resetCommunityRevealState(handNo);
   }
-  cards.forEach((c, idx) => {
-    const isNew = idx >= trackedCommunityCount;
-    el.communityCards.appendChild(cardNode(c, false, isNew ? 'deal-in' : ''));
-  });
+
+  if (!communityRevealKnown) {
+    communityTargetCards = cards.slice();
+    communityVisibleCards = cards.slice();
+    trackedCommunityCount = cards.length;
+    communityRevealKnown = true;
+    drawCommunityBoard(-1);
+    return;
+  }
+
+  if (cards.length < communityVisibleCards.length) {
+    clearCommunityRevealTimer();
+    communityTargetCards = cards.slice();
+    communityVisibleCards = cards.slice();
+    trackedCommunityCount = cards.length;
+    drawCommunityBoard(-1);
+    return;
+  }
+
+  communityTargetCards = cards.slice();
   trackedCommunityCount = cards.length;
-  for (let i = cards.length; i < 5; i += 1) {
-    el.communityCards.appendChild(cardNode('XX', true));
+
+  if (communityVisibleCards.length > communityTargetCards.length) {
+    communityVisibleCards = communityTargetCards.slice();
   }
+
+  drawCommunityBoard(-1);
+  scheduleCommunityReveal();
 }
 
 function addBadge(parent, text, klass = '') {
@@ -1580,6 +1647,8 @@ function renderStats() {
       seat: p.seat,
       stack: p.stack,
       net: p.stack - base,
+      rebuyCount: Math.max(0, Number(p.rebuyCount) || 0),
+      rebuyTotal: Math.max(0, Number(p.rebuyTotal) || 0),
     }))
     .sort((a, b) => b.stack - a.stack);
   const maxAbs = Math.max(1, ...rows.map((r) => Math.abs(r.net)));
@@ -1612,7 +1681,7 @@ function renderStats() {
 
     const sub = document.createElement('div');
     sub.className = 'stat-sub';
-    sub.textContent = `当前筹码 ${r.stack}`;
+    sub.textContent = `当前筹码 ${r.stack} · 重买 ${r.rebuyCount} 次（${r.rebuyTotal}）`;
 
     row.appendChild(top);
     row.appendChild(bar);
@@ -2265,6 +2334,15 @@ function renderStatus() {
   el.changeSeatBtn.classList.toggle('hidden', !isPlayer);
   el.changeSeatBtn.disabled = !canChangeSeatNow;
   el.changeSeatBtn.textContent = seatPickMode ? '取消换座' : '换座';
+  const canRebuy = Boolean(
+    isPlayer &&
+      me &&
+      me.stack <= 0 &&
+      (!g || g.finished || !me.inHand),
+  );
+  el.rebuyBtn.classList.toggle('hidden', !canRebuy);
+  el.rebuyBtn.disabled = !canRebuy;
+  el.rebuyBtn.textContent = `重新买入 ${roomState.settings.startingStack}`;
 
   const sessionSec = Math.max(0, Math.ceil((roomState.sessionEndsAt - nowByServer()) / 1000));
   el.sessionTimer.textContent = `时长剩余 ${fmtClock(sessionSec)}`;
@@ -2474,6 +2552,9 @@ socket.on('disconnect', () => {
   clearAllPending();
   setActionPending(false);
   resetActionCueTracking();
+  resetCommunityRevealState(null);
+  clearPotPushAnimationLayer();
+  pendingPotPushAnimation = null;
   if (el.lobbyView.classList.contains('hidden')) {
     showNotice(el.tableNotice, '连接已断开，正在尝试重连...', 'error');
   } else {
@@ -2485,6 +2566,9 @@ socket.on('connect_error', () => {
   clearAllPending();
   setActionPending(false);
   resetActionCueTracking();
+  resetCommunityRevealState(null);
+  clearPotPushAnimationLayer();
+  pendingPotPushAnimation = null;
   if (el.lobbyView.classList.contains('hidden')) {
     showNotice(el.tableNotice, '连接失败，请检查网络后重试', 'error');
   } else {
@@ -2504,8 +2588,7 @@ socket.on('joinedRoom', ({ playerId }) => {
   trackedHandNo = null;
   trackedPhase = null;
   trackedResultHandNo = null;
-  trackedCommunityHandNo = null;
-  trackedCommunityCount = 0;
+  resetCommunityRevealState(null);
   trackedSeatDealHandNo = null;
   trackedTurnCueToken = null;
   meId = playerId;
@@ -2548,6 +2631,7 @@ socket.on('kicked', (payload) => {
   seatPickMode = false;
   clearPreAction(true);
   showHandBanner('');
+  resetCommunityRevealState(null);
   trackedSeatDealHandNo = null;
   trackedTurnCueToken = null;
   showNotice(el.notice, payload?.reason || '你已被移出房间', 'error');
@@ -2718,6 +2802,7 @@ el.changeSeatBtn.addEventListener('click', () => {
 el.takeSeatBtn.addEventListener('click', () => socket.emit('takeSeat'));
 el.becomeSpectatorBtn.addEventListener('click', () => socket.emit('becomeSpectator'));
 el.readyBtn.addEventListener('click', () => socket.emit('toggleReady'));
+el.rebuyBtn.addEventListener('click', () => socket.emit('rebuy'));
 el.startBtn.addEventListener('click', () => socket.emit('startHand'));
 
 el.leaveBtn.addEventListener('click', () => {
@@ -2730,6 +2815,7 @@ el.leaveBtn.addEventListener('click', () => {
   seatPickMode = false;
   clearPreAction(true);
   showHandBanner('');
+  resetCommunityRevealState(null);
   trackedSeatDealHandNo = null;
   trackedTurnCueToken = null;
   socket.emit('leaveRoom');
