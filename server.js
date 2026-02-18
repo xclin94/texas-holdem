@@ -11,7 +11,37 @@ const EMOTE_MIN_INTERVAL_MS = 350;
 const EMOTE_COMBO_WINDOW_MS = 2200;
 const EMOTE_COMBO_MAX = 5;
 const SOCIAL_MESSAGE_MAX_LEN = 120;
-const QUICK_EMOTE_SET = new Set(['like', 'laugh', 'wow', 'cry', '666', 'heart']);
+const QUICK_EMOTE_SET = new Set([
+  'like',
+  'laugh',
+  'wow',
+  'cry',
+  '666',
+  'grin',
+  'joy',
+  'rofl',
+  'wink',
+  'kiss',
+  'cool',
+  'think',
+  'shock',
+  'sob',
+  'angry',
+  'facepalm',
+  'clap',
+  'ok',
+  'pray',
+  'muscle',
+  'party',
+  'beer',
+  'coffee',
+  'money',
+  'spade',
+  'fire',
+  'heart',
+  'skull',
+  'eyes',
+]);
 const PROP_EMOTE_SET = new Set(['egg', 'flower', 'water', 'rocket', 'kiss', 'tomato']);
 
 const DEFAULT_SETTINGS = Object.freeze({

@@ -905,6 +905,27 @@ input[type='checkbox'] {
   margin-bottom: 0;
 }
 
+.center-start-btn {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  min-width: 180px;
+  min-height: 74px;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  border-radius: 18px;
+  box-shadow:
+    0 16px 26px rgba(0, 0, 0, 0.42),
+    inset 0 0 0 1px rgba(255, 244, 204, 0.24);
+}
+
+.center-start-btn.hidden {
+  display: none !important;
+}
+
 .seat-map {
   position: absolute;
   inset: 0;
@@ -1020,8 +1041,10 @@ input[type='checkbox'] {
 
 .seat-prop-btn.btn.tiny {
   min-width: 0;
-  padding: 5px 6px;
-  font-size: 11px;
+  padding: 4px;
+  font-size: 22px;
+  line-height: 1;
+  min-height: 34px;
 }
 
 .social-dock {
@@ -1074,14 +1097,12 @@ input[type='checkbox'] {
 }
 
 .social-row .btn.tiny {
-  padding: 4px 6px;
-  min-width: 56px;
-}
-
-.social-tip {
-  margin: 0;
-  font-size: 12px;
-  color: #cce0d0;
+  padding: 2px;
+  min-width: 36px;
+  height: 36px;
+  font-size: 22px;
+  line-height: 1;
+  border-radius: 10px;
 }
 
 .social-counter {
@@ -2969,6 +2990,14 @@ input[type='checkbox'] {
     padding-bottom: 120px;
   }
 
+  .center-start-btn {
+    min-width: 146px;
+    min-height: 58px;
+    font-size: 24px;
+    letter-spacing: 2px;
+    border-radius: 14px;
+  }
+
   .settings-launcher,
   .social-launcher {
     left: 8px;
@@ -2998,8 +3027,9 @@ input[type='checkbox'] {
   }
 
   .social-row .btn.tiny {
-    font-size: 11px;
-    min-width: 52px;
+    font-size: 20px;
+    min-width: 34px;
+    height: 34px;
   }
 
   .seat-interact-menu {
@@ -3179,6 +3209,13 @@ input[type='checkbox'] {
     padding-bottom: 188px;
   }
 
+  .center-start-btn {
+    min-width: 132px;
+    min-height: 52px;
+    font-size: 22px;
+    letter-spacing: 1px;
+  }
+
   .settings-launcher,
   .social-launcher {
     left: 6px;
@@ -3213,9 +3250,10 @@ input[type='checkbox'] {
   }
 
   .social-row .btn.tiny {
-    padding: 3px 5px;
-    font-size: 10px;
-    min-width: 48px;
+    padding: 2px;
+    font-size: 18px;
+    min-width: 30px;
+    height: 30px;
   }
 
   .social-dock {
@@ -3304,6 +3342,13 @@ input[type='checkbox'] {
   .table-canvas {
     min-height: 560px;
     padding-bottom: 84px;
+  }
+
+  .center-start-btn {
+    min-width: 132px;
+    min-height: 50px;
+    font-size: 21px;
+    letter-spacing: 1px;
   }
 
   .settings-launcher,

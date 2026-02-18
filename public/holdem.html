@@ -158,13 +158,11 @@
             <div class="hint-row">
               <span>房间号：<strong id="roomIdText">-</strong></span>
               <button id="copyRoomBtn" class="btn tiny">复制</button>
-              <span id="roomModeText">NLH</span>
               <span id="sessionTimer">时长剩余 --:--</span>
             </div>
           </div>
 
           <div class="actions">
-            <button id="startBtn" class="btn primary">房主开局</button>
             <button id="leaveBtn" class="btn danger">离开</button>
             <button id="readyBtn" class="btn">准备</button>
             <button id="rebuyBtn" class="btn hidden">重新买入</button>
@@ -236,6 +234,7 @@
                 <div class="table-center-title">公共牌</div>
                 <div id="communityCards" class="cards board-cards"></div>
               </div>
+              <button id="startBtn" class="center-start-btn btn primary">开局</button>
               <div id="seatMap" class="seat-map"></div>
               <div id="emoteLayer" class="emote-layer"></div>
               <div id="seatInteractMenu" class="seat-interact-menu hidden" aria-hidden="true"></div>
@@ -249,19 +248,33 @@
               <section id="socialDock" class="social-dock collapsed">
                 <div class="social-head">
                   <strong>互动</strong>
-                  <div class="social-head-actions">
-                    <button id="socialCollapseBtn" class="btn tiny">关闭</button>
-                  </div>
                 </div>
                 <div id="socialBody" class="social-body">
-                  <p class="social-tip">点击任意玩家座位，可弹出互动道具菜单。</p>
                   <div class="social-row">
-                    <button class="btn tiny quick-emote-btn" data-emote-code="like">👍 点赞</button>
-                    <button class="btn tiny quick-emote-btn" data-emote-code="laugh">😂 爆笑</button>
-                    <button class="btn tiny quick-emote-btn" data-emote-code="wow">😮 惊了</button>
-                    <button class="btn tiny quick-emote-btn" data-emote-code="cry">😭 哭了</button>
-                    <button class="btn tiny quick-emote-btn" data-emote-code="666">🔥 666</button>
-                    <button class="btn tiny quick-emote-btn" data-emote-code="heart">❤️ 比心</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="grin">😀</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="joy">😂</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="rofl">🤣</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="wink">😉</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="kiss">😘</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="cool">😎</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="think">🤔</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="shock">😮</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="sob">😭</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="angry">😡</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="facepalm">🤦</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="clap">👏</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="ok">👌</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="pray">🙏</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="muscle">💪</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="party">🎉</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="beer">🍻</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="coffee">☕</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="money">💰</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="spade">♠️</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="fire">🔥</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="heart">❤️</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="skull">💀</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="eyes">👀</button>
                   </div>
                   <div id="counterRow" class="social-counter hidden">
                     <span id="counterText">被互动了，是否反击？</span>

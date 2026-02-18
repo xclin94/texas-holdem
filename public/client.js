@@ -251,12 +251,35 @@ const quickRaiseLabelMap = {
   '2': '2池',
 };
 const QUICK_EMOTE_META = {
-  like: { label: '点赞', emoji: '👍' },
-  laugh: { label: '爆笑', emoji: '😂' },
-  wow: { label: '惊了', emoji: '😮' },
-  cry: { label: '哭了', emoji: '😭' },
-  '666': { label: '666', emoji: '🔥' },
-  heart: { label: '比心', emoji: '❤️' },
+  like: { label: '👍', emoji: '👍' },
+  laugh: { label: '😂', emoji: '😂' },
+  wow: { label: '😮', emoji: '😮' },
+  cry: { label: '😭', emoji: '😭' },
+  '666': { label: '🔥', emoji: '🔥' },
+  grin: { label: '😀', emoji: '😀' },
+  joy: { label: '😂', emoji: '😂' },
+  rofl: { label: '🤣', emoji: '🤣' },
+  wink: { label: '😉', emoji: '😉' },
+  kiss: { label: '😘', emoji: '😘' },
+  cool: { label: '😎', emoji: '😎' },
+  think: { label: '🤔', emoji: '🤔' },
+  shock: { label: '😮', emoji: '😮' },
+  sob: { label: '😭', emoji: '😭' },
+  angry: { label: '😡', emoji: '😡' },
+  facepalm: { label: '🤦', emoji: '🤦' },
+  clap: { label: '👏', emoji: '👏' },
+  ok: { label: '👌', emoji: '👌' },
+  pray: { label: '🙏', emoji: '🙏' },
+  muscle: { label: '💪', emoji: '💪' },
+  party: { label: '🎉', emoji: '🎉' },
+  beer: { label: '🍻', emoji: '🍻' },
+  coffee: { label: '☕', emoji: '☕' },
+  money: { label: '💰', emoji: '💰' },
+  spade: { label: '♠️', emoji: '♠️' },
+  fire: { label: '🔥', emoji: '🔥' },
+  heart: { label: '❤️', emoji: '❤️' },
+  skull: { label: '💀', emoji: '💀' },
+  eyes: { label: '👀', emoji: '👀' },
 };
 const PROP_EMOTE_META = {
   egg: { label: '鸡蛋', emoji: '🥚' },
@@ -2685,7 +2708,9 @@ function renderStatus() {
 
   el.roomTitle.textContent = roomState?.roomName || '房间';
   el.roomIdText.textContent = roomState?.roomId || '-';
-  el.roomModeText.textContent = `${roomState?.settings?.mode || 'NLH'} · ${roomState?.myRole === 'spectator' ? '观战中' : '玩家'} · ${roomState?.settings?.tournamentMode ? '锦标赛' : '现金桌'}`;
+  if (el.roomModeText) {
+    el.roomModeText.textContent = '';
+  }
 
   const autoStartSec = roomState?.autoStartAt ? Math.max(0, Math.ceil((roomState.autoStartAt - nowByServer()) / 1000)) : 0;
   if (g?.finished && autoStartSec > 0) {
@@ -2740,11 +2765,9 @@ function renderStatus() {
   el.readyBtn.disabled = !isPlayer;
   const waitingAuto = Boolean(g?.finished && autoStartSec > 0);
   el.startBtn.disabled = waitingAuto || !(roomState.canStart && isHost && isPlayer);
-  if (waitingAuto) {
-    el.startBtn.textContent = `自动发牌 ${autoStartSec}s`;
-  } else {
-    el.startBtn.textContent = g?.finished ? '开始下一手' : '房主开局';
-  }
+  el.startBtn.textContent = '开局';
+  const showCenterStart = Boolean(isHost && (!g || g.finished));
+  el.startBtn.classList.toggle('hidden', !showCenterStart);
 
   el.takeSeatBtn.classList.toggle('hidden', !roomState.canTakeSeat);
   el.becomeSpectatorBtn.classList.toggle('hidden', !roomState.canBecomeSpectator);
@@ -2833,9 +2856,9 @@ function myDisplayName() {
 
 function parseLogLine(rawLine) {
   const line = String(rawLine || '');
-  const tm = line.match(/^(\d{1,2}:\d{2}:\d{2})\s(.+)$/);
-  const timeText = tm ? tm[1] : '';
-  const body = tm ? tm[2] : line;
+  const tm = line.match(/^(\d{1,2}:\d{2}:\d{2})(?:\s?(AM|PM))?\s+(.+)$/i);
+  const timeText = tm ? `${tm[1]}${tm[2] ? ` ${tm[2].toUpperCase()}` : ''}` : '';
+  const body = tm ? tm[3] : line;
   const chat = body.match(/^([^:：]{1,24}?)(\(观战\))?[:：]\s(.+)$/);
   if (!chat) {
     return {
@@ -2985,7 +3008,7 @@ function openSeatInteractMenu(targetPlayer, seatNode) {
   const menu = el.seatInteractMenu;
   const canKick = Boolean(roomState?.hostId === meId && targetId !== meId);
   const options = Object.entries(PROP_EMOTE_META)
-    .map(([code, meta]) => `<button class="btn tiny seat-prop-btn" data-emote-code="${code}">${meta.emoji} ${meta.label}</button>`)
+    .map(([code, meta]) => `<button class="btn tiny seat-prop-btn" data-emote-code="${code}">${meta.emoji}</button>`)
     .join('');
   const admin = canKick
     ? '<div class="seat-interact-admin"><button class="btn tiny danger seat-kick-btn">踢出玩家</button></div>'
@@ -3129,10 +3152,7 @@ function spawnQuickEmoteBubble(event) {
   const emo = document.createElement('span');
   emo.className = 'emo';
   emo.textContent = emoteEmoji(event.kind, event.code);
-  const who = document.createElement('small');
-  who.textContent = event.fromName || roomMemberName(event.fromId);
   node.appendChild(emo);
-  node.appendChild(who);
   if ((event.combo || 1) > 1) {
     const combo = document.createElement('b');
     combo.className = 'emote-combo-tag';
@@ -3179,11 +3199,8 @@ function spawnSocialMessageBubble(event) {
   node.className = 'social-msg-bubble';
   node.style.setProperty('--bx', `${from.x}px`);
   node.style.setProperty('--by', `${from.y}px`);
-  const who = document.createElement('b');
-  who.textContent = event.fromName || roomMemberName(event.fromId);
   const msg = document.createElement('span');
   msg.textContent = event.message || '';
-  node.appendChild(who);
   node.appendChild(msg);
   el.emoteLayer.appendChild(node);
   setTimeout(() => node.remove(), 5000);
@@ -3270,7 +3287,7 @@ function renderSocialChatFeed() {
     row.className = `mini-chat-item${item.sender === myDisplayName() ? ' mine' : ''}`;
     const who = document.createElement('span');
     who.className = 'who';
-    who.textContent = `${item.sender}${item.spectatorTag || ''}`;
+    who.textContent = `${item.sender}:`;
     const msg = document.createElement('span');
     msg.className = 'msg';
     msg.textContent = item.message || '';
@@ -3630,6 +3647,16 @@ document.addEventListener('click', (evt) => {
   if (target.closest('#seatInteractMenu')) return;
   if (target.closest('.seat-node')) return;
   closeSeatInteractMenu();
+});
+
+document.addEventListener('click', (evt) => {
+  if (uiSocialCollapsed || !roomState) return;
+  const target = evt.target;
+  if (!(target instanceof Element)) return;
+  if (target.closest('#socialDock')) return;
+  if (target.closest('#socialLauncherBtn')) return;
+  uiSocialCollapsed = true;
+  applySocialDockState(true);
 });
 
 if (el.sideDrawerBackdrop) {
