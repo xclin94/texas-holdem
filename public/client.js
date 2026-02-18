@@ -135,6 +135,7 @@ const el = {
   potHeroText: $('potHeroText'),
   betText: $('betText'),
   streetBetTotalText: $('streetBetTotalText'),
+  streetBetHeroText: $('streetBetHeroText'),
   betHeroText: $('betHeroText'),
   myStackText: $('myStackText'),
   turnText: $('turnText'),
@@ -149,6 +150,7 @@ const el = {
   turnWarning: $('turnWarning'),
 
   communityCards: $('communityCards'),
+  mobilePhaseText: $('mobilePhaseText'),
   handBanner: $('handBanner'),
   tableGrid: $('tableGrid'),
   sidePanel: $('sidePanel'),
@@ -1435,6 +1437,16 @@ function computeLiveMyHandName() {
   return ev?.name || roomState?.myHandName || '-';
 }
 
+function computeLiveSeatHandName(player) {
+  if (!roomState?.game || !player) return '-';
+  if (player.id === meId) return computeLiveMyHandName();
+  const holeCards = Array.isArray(player.holeCards) ? player.holeCards.filter(Boolean) : [];
+  if (holeCards.length < 2) return '-';
+  const board = communityRevealKnown ? communityVisibleCards : roomState.game.community || [];
+  const ev = evaluateLiveHand([...holeCards, ...board]);
+  return ev?.name || '-';
+}
+
 function refreshLiveHandTypeText() {
   if (!el.handTypeText) return;
   el.handTypeText.textContent = computeLiveMyHandName();
@@ -1939,6 +1951,14 @@ function renderSeatMap() {
     if (roomState.game?.dealerId === p.id) node.classList.add('seat-dealer');
     if (roomState.game?.smallBlindId === p.id) node.classList.add('seat-sb');
     if (roomState.game?.bigBlindId === p.id) node.classList.add('seat-bb');
+    const seatHandType = computeLiveSeatHandName(p);
+    if (seatHandType && seatHandType !== '-') {
+      const handTypeTag = document.createElement('div');
+      handTypeTag.className = 'seat-hand-type';
+      handTypeTag.textContent = seatHandType;
+      node.appendChild(handTypeTag);
+      node.classList.add('has-hand-type');
+    }
 
     const badges = document.createElement('div');
     badges.className = 'badges';
@@ -1951,7 +1971,6 @@ function renderSeatMap() {
     if (roomState.game?.smallBlindId === p.id) pushBadge(compact ? 'SB' : '小盲', 'role-sb');
     if (roomState.game?.bigBlindId === p.id) pushBadge(compact ? 'BB' : '大盲', 'role-bb');
     if (p.id === roomState.hostId) pushBadge(compact ? '房' : '房主', 'gold');
-    if (roomState.game?.turnId === p.id && !roomState.game?.finished) pushBadge(compact ? '行动' : '行动中', 'ok');
     if (!compact && p.ready) pushBadge('已准备', 'ok');
     if (p.folded) pushBadge(compact ? '弃' : '弃牌', 'warn');
     if (p.allIn) pushBadge('全下');
@@ -1999,6 +2018,12 @@ function renderSeatMap() {
 
     node.appendChild(head);
     node.appendChild(badges);
+    if (isTurn && !roomState.game?.finished) {
+      const timerBar = document.createElement('div');
+      timerBar.className = 'seat-turn-progress';
+      timerBar.innerHTML = '<i></i>';
+      node.appendChild(timerBar);
+    }
     node.appendChild(betChip);
     node.appendChild(stackVisual);
     node.appendChild(sub);
@@ -2024,6 +2049,25 @@ function renderSeatMap() {
   if (shouldAnimateSeatDeal) {
     trackedSeatDealHandNo = handNo;
   }
+  updateSeatTurnProgress();
+}
+
+function updateSeatTurnProgress() {
+  if (!el.seatMap) return;
+  const g = roomState?.game;
+  const deadline = Number(g?.turnDeadlineAt || 0);
+  const totalMs = Math.max(1000, (Number(roomState?.settings?.turnTimeSec) || 25) * 1000);
+  const remainMs = deadline ? Math.max(0, deadline - nowByServer()) : 0;
+  const pct = deadline ? Math.max(0, Math.min(100, (remainMs / totalMs) * 100)) : 0;
+  const urgent = deadline && remainMs <= 5000;
+
+  const bars = Array.from(el.seatMap.querySelectorAll('.seat-turn-progress'));
+  bars.forEach((bar) => {
+    const fill = bar.querySelector('i');
+    if (!fill) return;
+    fill.style.width = `${pct}%`;
+    bar.classList.toggle('urgent', Boolean(urgent));
+  });
 }
 
 function renderSpectators() {
@@ -2718,6 +2762,9 @@ function renderStatus() {
   } else {
     el.phaseText.textContent = g ? phaseLabel(g.phase) : '等待开局';
   }
+  if (el.mobilePhaseText) {
+    el.mobilePhaseText.textContent = el.phaseText.textContent;
+  }
   refreshLiveHandTypeText();
   const lock = activeResultVisualLock();
   const potTotal = lock ? lock.potTotal : g?.potTotal || 0;
@@ -2727,6 +2774,7 @@ function renderStatus() {
   el.potHeroText.textContent = String(potTotal);
   el.betText.textContent = String(currentBet);
   if (el.streetBetTotalText) el.streetBetTotalText.textContent = String(streetBetTotal);
+  if (el.streetBetHeroText) el.streetBetHeroText.textContent = String(streetBetTotal);
   el.betHeroText.textContent = String(currentBet);
   el.turnText.textContent = roomMemberName(g?.turnId) || '-';
 
@@ -2798,6 +2846,7 @@ function renderStatus() {
   const myTurn = Boolean(g && !g.finished && g.turnId === meId);
   const urgentTurn = Boolean(myTurn && turnSec !== null && turnSec > 0 && turnSec <= 8);
   el.turnTimerText.classList.toggle('turn-timer-urgent', urgentTurn);
+  updateSeatTurnProgress();
 
   if (el.turnWarning) {
     let warning = '';
