@@ -2983,12 +2983,17 @@ function openSeatInteractMenu(targetPlayer, seatNode) {
   }
   seatInteractTargetId = targetId;
   const menu = el.seatInteractMenu;
+  const canKick = Boolean(roomState?.hostId === meId && targetId !== meId);
   const options = Object.entries(PROP_EMOTE_META)
     .map(([code, meta]) => `<button class="btn tiny seat-prop-btn" data-emote-code="${code}">${meta.emoji} ${meta.label}</button>`)
     .join('');
+  const admin = canKick
+    ? '<div class="seat-interact-admin"><button class="btn tiny danger seat-kick-btn">踢出玩家</button></div>'
+    : '';
   menu.innerHTML = `
     <div class="seat-interact-title">互动 ${targetPlayer.name || '玩家'}</div>
     <div class="seat-interact-actions">${options}</div>
+    ${admin}
   `;
   menu.classList.remove('hidden');
 
@@ -3016,6 +3021,19 @@ function openSeatInteractMenu(targetPlayer, seatNode) {
       collapseSocialDockAfterSend();
     });
   });
+
+  const kickBtn = menu.querySelector('.seat-kick-btn');
+  if (kickBtn) {
+    kickBtn.addEventListener('click', () => {
+      if (!seatInteractTargetId) return;
+      const who = targetPlayer.name || '该玩家';
+      const ok = window.confirm(`确认踢出 ${who} 吗？踢出后对方会离开房间。`);
+      if (!ok) return;
+      socket.emit('kickMember', { targetId: seatInteractTargetId });
+      closeSeatInteractMenu();
+      showNotice(el.tableNotice, `已踢出 ${who}`, 'ok');
+    });
+  }
 }
 
 function emoteLabel(kind, code) {

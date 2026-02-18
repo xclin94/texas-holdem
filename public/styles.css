@@ -1009,6 +1009,15 @@ input[type='checkbox'] {
   gap: 6px;
 }
 
+.seat-interact-admin {
+  margin-top: 8px;
+  display: flex;
+}
+
+.seat-interact-admin .btn {
+  flex: 1 1 auto;
+}
+
 .seat-prop-btn.btn.tiny {
   min-width: 0;
   padding: 5px 6px;
