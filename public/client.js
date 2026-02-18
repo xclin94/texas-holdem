@@ -200,6 +200,17 @@ const quickRaiseLabelMap = {
   '1.5': '1.5池',
   '2': '2池',
 };
+const ACTION_VOICE_SRC = {
+  check: '/audio/check-zh.mp3',
+  call: '/audio/call-zh.mp3',
+  bet: '/audio/bet-zh.mp3',
+  raise: '/audio/raise-zh.mp3',
+  fold: '/audio/fold-zh.mp3',
+  allin: '/audio/allin-zh.mp3',
+  straddle: '/audio/straddle-zh.mp3',
+  skipstraddle: '/audio/skipstraddle-zh.mp3',
+};
+const actionVoiceCache = {};
 const MOBILE_SEAT_LAYOUTS = {
   2: [
     [50, 84],
@@ -534,8 +545,51 @@ function playTurnCue() {
   }
 }
 
-function playActionCue(kind) {
-  if (!uiSoundEnabled) return;
+function getActionVoiceBase(kind) {
+  const src = ACTION_VOICE_SRC[kind];
+  if (!src) return null;
+  if (!actionVoiceCache[kind]) {
+    const audio = new Audio(src);
+    audio.preload = 'auto';
+    audio.volume = 0.95;
+    actionVoiceCache[kind] = audio;
+  }
+  return actionVoiceCache[kind];
+}
+
+function warmupActionVoices() {
+  Object.keys(ACTION_VOICE_SRC).forEach((kind) => {
+    const audio = getActionVoiceBase(kind);
+    if (!audio) return;
+    try {
+      audio.load();
+    } catch {
+      // Ignore preload limitations.
+    }
+  });
+}
+
+function playActionVoice(kind, onFail) {
+  const base = getActionVoiceBase(kind);
+  if (!base) return false;
+  try {
+    // Clone to allow repeated rapid actions without waiting for current playback.
+    const clip = base.cloneNode(true);
+    clip.volume = 0.95;
+    const p = clip.play();
+    if (p && typeof p.catch === 'function') {
+      p.catch(() => {
+        if (typeof onFail === 'function') onFail();
+      });
+    }
+    return true;
+  } catch {
+    if (typeof onFail === 'function') onFail();
+    return false;
+  }
+}
+
+function playToneCue(kind) {
   const AudioCtor = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtor) return;
   try {
@@ -610,6 +664,13 @@ function playActionCue(kind) {
   } catch {
     // Ignore autoplay/device limitations.
   }
+}
+
+function playActionCue(kind) {
+  if (!uiSoundEnabled) return;
+  const voicePlayed = playActionVoice(kind, () => playToneCue(kind));
+  if (voicePlayed) return;
+  playToneCue(kind);
 }
 
 function setActionPending(v) {
@@ -1814,7 +1875,7 @@ function renderActions() {
   if (cueToken !== trackedTurnCueToken) {
     trackedTurnCueToken = cueToken;
     raiseUiExpanded = false;
-    if (isMobileView() && uiActionPanelCollapsed) {
+    if (uiActionPanelCollapsed) {
       setActionPanelCollapsed(false, false);
     }
     showHandBanner(actionState.mode === 'straddle' ? '轮到你决定 straddle' : '轮到你行动', 'ok', 1100);
@@ -2582,6 +2643,7 @@ el.straddleBtn.addEventListener('click', () => {
 });
 
 el.skipStraddleBtn.addEventListener('click', () => {
+  playActionCue('skipstraddle');
   sendPlayerAction({ action: 'skipstraddle' });
 });
 
@@ -2621,6 +2683,13 @@ window.addEventListener('resize', () => {
 });
 
 bindMobileSwipeControls();
+window.addEventListener(
+  'pointerdown',
+  () => {
+    warmupActionVoices();
+  },
+  { once: true },
+);
 loadName();
 applyTheme();
 applyMotionMode();
