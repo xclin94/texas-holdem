@@ -61,8 +61,9 @@ let socialUnreadCount = 0;
 let socialSeenChatCount = 0;
 let socialCounterState = null;
 let socialCounterTimer = null;
-let socialTargetId = '';
+let seatInteractTargetId = '';
 let rebuyPromptToken = '';
+let resultVisualLock = null;
 
 const REQUEST_TIMEOUT_MS = 7000;
 const ACTION_PENDING_MS = 1200;
@@ -210,6 +211,7 @@ const el = {
   chatInput: $('chatInput'),
   sendChatBtn: $('sendChatBtn'),
   emoteLayer: $('emoteLayer'),
+  seatInteractMenu: $('seatInteractMenu'),
   socialLauncherBtn: $('socialLauncherBtn'),
   socialLauncherBadge: $('socialLauncherBadge'),
   socialDock: $('socialDock'),
@@ -217,8 +219,6 @@ const el = {
   socialCollapseBtn: $('socialCollapseBtn'),
   socialSoundBtn: $('socialSoundBtn'),
   socialAnimBtn: $('socialAnimBtn'),
-  socialTargetHint: $('socialTargetHint'),
-  clearSocialTargetBtn: $('clearSocialTargetBtn'),
   counterRow: $('counterRow'),
   counterText: $('counterText'),
   counterBtn: $('counterBtn'),
@@ -439,12 +439,20 @@ function refreshMotionButton() {
 
 function refreshSideButton() {
   if (!el.sideToggleBtn) return;
+  if (el.sideToggleBtn.classList.contains('settings-launcher')) {
+    el.sideToggleBtn.classList.toggle('active', !uiSideCollapsed);
+    const text = uiSideCollapsed ? '打开设置边栏' : '收起设置边栏';
+    el.sideToggleBtn.title = text;
+    el.sideToggleBtn.setAttribute('aria-label', text);
+    return;
+  }
   el.sideToggleBtn.textContent = uiSideCollapsed ? '展开边栏' : '收起边栏';
 }
 
 function refreshSideTabs() {
   if (uiSideTab === 'config' || uiSideTab === 'admin') uiSideTab = 'room';
-  const validTabs = new Set(['chips', 'chart', 'history', 'chat', 'room']);
+  if (uiSideTab === 'chat') uiSideTab = 'settings';
+  const validTabs = new Set(['chips', 'chart', 'history', 'room', 'settings']);
   if (!validTabs.has(uiSideTab)) uiSideTab = 'chips';
   sideTabButtons.forEach((btn) => {
     const active = btn.dataset.sideTab === uiSideTab;
@@ -1001,6 +1009,86 @@ function roomPlayerById(id) {
   return roomState?.players?.find((p) => p.id === id) || null;
 }
 
+function activeResultVisualLock() {
+  const g = roomState?.game;
+  if (!g?.finished || !resultVisualLock) return null;
+  if (resultVisualLock.handNo !== g.handNo) return null;
+  return resultVisualLock;
+}
+
+function displayStackForPlayer(player) {
+  const lock = activeResultVisualLock();
+  if (!player) return 0;
+  if (lock && Object.prototype.hasOwnProperty.call(lock.stacksById, player.id)) {
+    return Math.max(0, Number(lock.stacksById[player.id]) || 0);
+  }
+  return Math.max(0, Number(player.stack) || 0);
+}
+
+function displayStreetBetForPlayer(player) {
+  const lock = activeResultVisualLock();
+  if (!player) return 0;
+  if (lock && Object.prototype.hasOwnProperty.call(lock.streetBetsById, player.id)) {
+    return Math.max(0, Number(lock.streetBetsById[player.id]) || 0);
+  }
+  return Math.max(0, Number(player.betThisStreet) || 0);
+}
+
+function maybeReleaseResultVisualLock() {
+  if (!resultVisualLock || !roomState?.game) {
+    resultVisualLock = null;
+    return false;
+  }
+  const g = roomState.game;
+  if (!g.finished || g.handNo !== resultVisualLock.handNo) {
+    resultVisualLock = null;
+    return false;
+  }
+  const targetLen = Array.isArray(g.community) ? g.community.length : 0;
+  const revealDone = communityVisibleCards.length >= targetLen && !communityRevealTimer;
+  if (!revealDone) return false;
+  resultVisualLock = null;
+  return true;
+}
+
+function syncResultVisualLock(prevState, nextState) {
+  const nextGame = nextState?.game;
+  if (!nextGame?.finished || uiMotionMode === 'reduced') {
+    resultVisualLock = null;
+    return;
+  }
+  const handNo = nextGame.handNo;
+  const sameHandPrev = Boolean(prevState?.game && prevState.game.handNo === handNo);
+  const enteredFinished = Boolean(!sameHandPrev || !prevState.game?.finished);
+  if (!enteredFinished && resultVisualLock?.handNo === handNo) return;
+
+  const targetLen = Array.isArray(nextGame.community) ? nextGame.community.length : 0;
+  if (targetLen <= communityVisibleCards.length) {
+    resultVisualLock = null;
+    return;
+  }
+
+  const sourcePlayers = sameHandPrev ? prevState.players || [] : nextState.players || [];
+  const stacksById = {};
+  const streetBetsById = {};
+  sourcePlayers.forEach((p) => {
+    stacksById[p.id] = Math.max(0, Number(p.stack) || 0);
+    streetBetsById[p.id] = Math.max(0, Number(p.betThisStreet) || 0);
+  });
+
+  resultVisualLock = {
+    handNo,
+    potTotal: Math.max(0, Number((sameHandPrev ? prevState.game?.potTotal : nextGame.potTotal) || 0)),
+    currentBet: Math.max(0, Number((sameHandPrev ? prevState.game?.currentBet : nextGame.currentBet) || 0)),
+    stacksById,
+    streetBetsById,
+  };
+}
+
+function shouldDelayResultEffects() {
+  return Boolean(activeResultVisualLock());
+}
+
 function closeRebuyModal() {
   if (el.rebuyModal) el.rebuyModal.classList.add('hidden');
 }
@@ -1153,6 +1241,7 @@ function runPotPushAnimation(payload) {
 
 function flushPendingPotPushAnimation() {
   if (!pendingPotPushAnimation) return;
+  if (shouldDelayResultEffects()) return;
   const payload = pendingPotPushAnimation;
   pendingPotPushAnimation = null;
   runPotPushAnimation(payload);
@@ -1163,7 +1252,7 @@ function clearCappuccinoCelebration() {
     clearTimeout(cappuccinoCleanupTimer);
     cappuccinoCleanupTimer = null;
   }
-  const node = el.tableCanvas?.querySelector('.cappuccino-celebration');
+  const node = el.tableCanvas?.querySelector('.moneybag-celebration, .cappuccino-celebration');
   if (node) node.remove();
 }
 
@@ -1177,25 +1266,23 @@ function queueCappuccinoCelebration(handNo, amount) {
 function runCappuccinoCelebration(payload) {
   if (!payload || !el.tableCanvas) return;
   if (uiMotionMode === 'reduced') {
-    showHandBanner(`女仆送来卡布奇诺 +${payload.amount}`, 'ok', 1700);
+    showHandBanner(`大胜 +${payload.amount}`, 'ok', 1200);
     return;
   }
 
   clearCappuccinoCelebration();
 
   const node = document.createElement('div');
-  node.className = 'cappuccino-celebration';
+  node.className = 'moneybag-celebration';
   node.setAttribute('aria-hidden', 'true');
   node.innerHTML = `
-    <div class="cappuccino-scene">
-      <div class="maid-card">
-        <span class="maid-icon">💁‍♀️</span>
-        <span class="maid-text">女仆上线</span>
-      </div>
-      <div class="cup-card">☕ 卡布奇诺</div>
-      <div class="coffee-pour"></div>
-      <div class="cappuccino-msg">大胜 +${payload.amount}，请你喝一杯</div>
+    <div class="moneybag-burst"></div>
+    <div class="moneybag-main">
+      <span class="moneybag-knot"></span>
+      <span class="moneybag-body"></span>
+      <span class="moneybag-mark">$</span>
     </div>
+    <div class="moneybag-amount">+${payload.amount}</div>
   `;
   el.tableCanvas.appendChild(node);
 
@@ -1205,11 +1292,12 @@ function runCappuccinoCelebration(payload) {
       clearTimeout(cappuccinoCleanupTimer);
       cappuccinoCleanupTimer = null;
     }
-  }, 5200);
+  }, 1200);
 }
 
 function flushPendingCappuccinoCelebration() {
   if (!pendingCappuccinoCelebration) return;
+  if (shouldDelayResultEffects()) return;
   const payload = pendingCappuccinoCelebration;
   pendingCappuccinoCelebration = null;
   runCappuccinoCelebration(payload);
@@ -1530,6 +1618,13 @@ function drawCommunityBoard(animateFrom = -1) {
     el.communityCards.appendChild(cardNode('XX', true));
   }
   refreshLiveHandTypeText();
+  if (maybeReleaseResultVisualLock()) {
+    renderStatus();
+    renderSeatMap();
+    renderStats();
+    flushPendingPotPushAnimation();
+    flushPendingCappuccinoCelebration();
+  }
 }
 
 function scheduleCommunityReveal() {
@@ -1582,6 +1677,13 @@ function renderCommunity() {
 
   drawCommunityBoard(-1);
   scheduleCommunityReveal();
+  if (maybeReleaseResultVisualLock()) {
+    renderStatus();
+    renderSeatMap();
+    renderStats();
+    flushPendingPotPushAnimation();
+    flushPendingCappuccinoCelebration();
+  }
 }
 
 function addBadge(parent, text, klass = '') {
@@ -1731,6 +1833,9 @@ function seatNodePreset(maxPlayers, compact) {
 function renderSeatMap() {
   el.seatMap.innerHTML = '';
   const players = roomState?.players || [];
+  if (seatInteractTargetId && !players.some((p) => p.id === seatInteractTargetId)) {
+    closeSeatInteractMenu();
+  }
   const maxPlayers = roomState?.settings?.maxPlayers || 9;
   const baseStack = roomState?.settings?.startingStack || 2000;
   const handNo = roomState?.game?.handNo || null;
@@ -1801,7 +1906,7 @@ function renderSeatMap() {
     }
 
     node.dataset.playerId = p.id;
-    if (socialTargetId && socialTargetId === p.id) {
+    if (seatInteractTargetId && seatInteractTargetId === p.id) {
       node.classList.add('social-targeted');
     }
 
@@ -1831,12 +1936,14 @@ function renderSeatMap() {
 
     const sub = document.createElement('div');
     sub.className = 'seat-sub';
+    const displayStack = displayStackForPlayer(p);
+    const displayStreetBet = displayStreetBetForPlayer(p);
     if (compact) {
-      const stackText = compactStackText(p.stack);
+      const stackText = compactStackText(displayStack);
       const action = !narrowMobile && p.lastAction ? ` · ${p.lastAction}` : '';
       sub.textContent = `后手 ${stackText}${action}`;
     } else {
-      sub.textContent = `后手 ${p.stack} · 本轮 ${p.betThisStreet} · 总投入 ${p.totalContribution}`;
+      sub.textContent = `后手 ${displayStack} · 本轮 ${displayStreetBet} · 总投入 ${p.totalContribution}`;
     }
 
     const act = !compact ? document.createElement('div') : null;
@@ -1845,11 +1952,11 @@ function renderSeatMap() {
       act.textContent = p.lastAction || '等待中';
     }
 
-    const streetBet = Math.max(0, Number(p.betThisStreet) || 0);
+    const streetBet = Math.max(0, Number(displayStreetBet) || 0);
     const betChip = document.createElement('div');
     betChip.className = `seat-bet-chip${streetBet > 0 ? ' active' : ''}`;
     betChip.textContent = compact ? `本轮 ${streetBet}` : `本轮下注 ${streetBet}`;
-    const stackVisual = createStackVisual(p.stack, baseStack);
+    const stackVisual = createStackVisual(displayStack, baseStack);
 
     const cards = document.createElement('div');
     cards.className = 'seat-cards';
@@ -1883,9 +1990,7 @@ function renderSeatMap() {
     if (!seatPickMode && p.id !== meId) {
       node.addEventListener('click', (evt) => {
         if (evt.target instanceof Element && evt.target.closest('button')) return;
-        if (uiSocialCollapsed) return;
-        socialTargetId = socialTargetId === p.id ? '' : p.id;
-        refreshSocialTargetState();
+        openSeatInteractMenu(p, node);
         renderSeatMap();
       });
     }
@@ -1938,8 +2043,8 @@ function renderStats() {
       id: p.id,
       name: p.name,
       seat: p.seat,
-      stack: p.stack,
-      net: p.stack - base,
+      stack: displayStackForPlayer(p),
+      net: displayStackForPlayer(p) - base,
       rebuyCount: Math.max(0, Number(p.rebuyCount) || 0),
       rebuyTotal: Math.max(0, Number(p.rebuyTotal) || 0),
     }))
@@ -2530,6 +2635,9 @@ function renderActions() {
 function renderStatus() {
   const g = roomState?.game;
   const blind = roomState?.blindState || { smallBlind: roomState.settings.smallBlind, bigBlind: roomState.settings.bigBlind, level: 1 };
+  if (!g?.finished) {
+    resultVisualLock = null;
+  }
   if (!g) {
     trackedHandNo = null;
     trackedPhase = null;
@@ -2586,9 +2694,10 @@ function renderStatus() {
     el.phaseText.textContent = g ? phaseLabel(g.phase) : '等待开局';
   }
   refreshLiveHandTypeText();
-  const potTotal = g?.potTotal || 0;
-  const currentBet = g?.currentBet || 0;
-  const streetBetTotal = (roomState?.players || []).reduce((sum, p) => sum + Math.max(0, Number(p.betThisStreet) || 0), 0);
+  const lock = activeResultVisualLock();
+  const potTotal = lock ? lock.potTotal : g?.potTotal || 0;
+  const currentBet = lock ? lock.currentBet : g?.currentBet || 0;
+  const streetBetTotal = (roomState?.players || []).reduce((sum, p) => sum + displayStreetBetForPlayer(p), 0);
   el.potText.textContent = String(potTotal);
   el.potHeroText.textContent = String(potTotal);
   el.betText.textContent = String(currentBet);
@@ -2620,7 +2729,7 @@ function renderStatus() {
   }
 
   const me = roomPlayerById(meId);
-  el.myStackText.textContent = me ? String(me.stack) : '-';
+  el.myStackText.textContent = me ? String(displayStackForPlayer(me)) : '-';
   el.readyBtn.textContent = me?.ready ? '取消准备' : '准备';
 
   const isHost = roomState.hostId === meId;
@@ -2798,8 +2907,9 @@ function clearSocialCounter() {
 function resetSocialState() {
   socialUnreadCount = 0;
   socialSeenChatCount = 0;
-  socialTargetId = '';
+  seatInteractTargetId = '';
   clearSocialCounter();
+  closeSeatInteractMenu();
   if (el.emoteLayer) el.emoteLayer.innerHTML = '';
   if (el.socialLauncherBadge) {
     el.socialLauncherBadge.classList.add('hidden');
@@ -2814,10 +2924,10 @@ function normalizeEmoteSoundPack(v) {
 
 function refreshSocialButtons() {
   if (el.socialSoundBtn) {
-    el.socialSoundBtn.textContent = `音效:${EMOTE_SOUND_PACK_LABEL[uiEmoteSoundPack] || '经典'}`;
+    el.socialSoundBtn.textContent = `互动音效：${EMOTE_SOUND_PACK_LABEL[uiEmoteSoundPack] || '经典'}`;
   }
   if (el.socialAnimBtn) {
-    el.socialAnimBtn.textContent = `动画:${uiSocialAnimEnabled ? '开' : '关'}`;
+    el.socialAnimBtn.textContent = `互动动画：${uiSocialAnimEnabled ? '开' : '关'}`;
   }
   if (el.socialCollapseBtn) {
     el.socialCollapseBtn.textContent = uiSocialCollapsed ? '打开' : '关闭';
@@ -2848,6 +2958,64 @@ function applySocialDockState(persist = false) {
   if (persist) {
     localStorage.setItem('holdem_social_collapsed', uiSocialCollapsed ? '1' : '0');
   }
+}
+
+function collapseSocialDockAfterSend() {
+  if (uiSocialCollapsed) return;
+  uiSocialCollapsed = true;
+  applySocialDockState(true);
+}
+
+function closeSeatInteractMenu() {
+  seatInteractTargetId = '';
+  if (!el.seatInteractMenu) return;
+  el.seatInteractMenu.classList.add('hidden');
+  el.seatInteractMenu.innerHTML = '';
+}
+
+function openSeatInteractMenu(targetPlayer, seatNode) {
+  if (!targetPlayer || !seatNode || !el.seatInteractMenu || !el.tableCanvas) return;
+  const targetId = String(targetPlayer.id || '');
+  if (!targetId) return;
+  if (seatInteractTargetId === targetId && !el.seatInteractMenu.classList.contains('hidden')) {
+    closeSeatInteractMenu();
+    return;
+  }
+  seatInteractTargetId = targetId;
+  const menu = el.seatInteractMenu;
+  const options = Object.entries(PROP_EMOTE_META)
+    .map(([code, meta]) => `<button class="btn tiny seat-prop-btn" data-emote-code="${code}">${meta.emoji} ${meta.label}</button>`)
+    .join('');
+  menu.innerHTML = `
+    <div class="seat-interact-title">互动 ${targetPlayer.name || '玩家'}</div>
+    <div class="seat-interact-actions">${options}</div>
+  `;
+  menu.classList.remove('hidden');
+
+  const tableRect = el.tableCanvas.getBoundingClientRect();
+  const seatRect = seatNode.getBoundingClientRect();
+  const anchorX = seatRect.left + seatRect.width / 2 - tableRect.left;
+  const anchorY = seatRect.top - tableRect.top;
+  const menuW = menu.offsetWidth || 220;
+  const menuH = menu.offsetHeight || 96;
+  const left = Math.max(8, Math.min(tableRect.width - menuW - 8, anchorX - menuW / 2));
+  let top = anchorY - menuH - 8;
+  if (top < 8) {
+    top = Math.min(tableRect.height - menuH - 8, anchorY + 20);
+  }
+  menu.style.left = `${Math.round(left)}px`;
+  menu.style.top = `${Math.round(top)}px`;
+
+  const buttons = Array.from(menu.querySelectorAll('.seat-prop-btn'));
+  buttons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const code = String(btn.dataset.emoteCode || '').trim();
+      if (!code || !seatInteractTargetId) return;
+      sendEmote('prop', code, seatInteractTargetId);
+      closeSeatInteractMenu();
+      collapseSocialDockAfterSend();
+    });
+  });
 }
 
 function emoteLabel(kind, code) {
@@ -3031,23 +3199,10 @@ function handleIncomingEmote(event) {
 }
 
 function refreshSocialTargetState() {
-  const players = (roomState?.players || []).filter((p) => p.id !== meId);
-  if (!players.some((p) => p.id === socialTargetId)) {
-    socialTargetId = '';
+  const players = roomState?.players || [];
+  if (seatInteractTargetId && !players.some((p) => p.id === seatInteractTargetId)) {
+    closeSeatInteractMenu();
   }
-  const target = players.find((p) => p.id === socialTargetId) || null;
-  if (el.socialTargetHint) {
-    el.socialTargetHint.textContent = target
-      ? `互动目标：${target.name}（座位${target.seat}）`
-      : '点击牌桌上的玩家卡片选择互动对象';
-  }
-  if (el.clearSocialTargetBtn) {
-    el.clearSocialTargetBtn.classList.toggle('hidden', !target);
-  }
-  const targetable = Boolean(target);
-  propEmoteButtons.forEach((btn) => {
-    btn.disabled = !targetable;
-  });
 }
 
 function sendEmote(kind, code, targetId = '', counter = false) {
@@ -3265,9 +3420,11 @@ socket.on('joinedRoom', ({ playerId }) => {
 });
 
 socket.on('roomState', (state) => {
+  const prevState = roomState;
   setActionPending(false);
   trackPlayerActionCues(state);
   trackSeatJoinCue(state);
+  syncResultVisualLock(prevState, state);
   roomState = state;
   syncServerClock(state?.serverNow, true);
   renderRoom();
@@ -3396,33 +3553,42 @@ el.refreshLobbyBtn.addEventListener('click', () => {
   socket.emit('listRooms');
 });
 
-el.themeToggleBtn.addEventListener('click', () => {
-  const idx = THEME_CYCLE.indexOf(uiTheme);
-  uiTheme = THEME_CYCLE[(idx + 1 + THEME_CYCLE.length) % THEME_CYCLE.length];
-  localStorage.setItem('holdem_theme', uiTheme);
-  applyTheme();
-  refreshThemeButton();
-});
+if (el.themeToggleBtn) {
+  el.themeToggleBtn.addEventListener('click', () => {
+    const idx = THEME_CYCLE.indexOf(uiTheme);
+    uiTheme = THEME_CYCLE[(idx + 1 + THEME_CYCLE.length) % THEME_CYCLE.length];
+    localStorage.setItem('holdem_theme', uiTheme);
+    applyTheme();
+    refreshThemeButton();
+  });
+}
 
-el.soundToggleBtn.addEventListener('click', () => {
-  uiSoundEnabled = !uiSoundEnabled;
-  localStorage.setItem('holdem_sound', uiSoundEnabled ? '1' : '0');
-  refreshSoundButton();
-  if (uiSoundEnabled) playTurnCue();
-});
+if (el.soundToggleBtn) {
+  el.soundToggleBtn.addEventListener('click', () => {
+    uiSoundEnabled = !uiSoundEnabled;
+    localStorage.setItem('holdem_sound', uiSoundEnabled ? '1' : '0');
+    refreshSoundButton();
+    if (uiSoundEnabled) playTurnCue();
+  });
+}
 
-el.motionToggleBtn.addEventListener('click', () => {
-  uiMotionMode = uiMotionMode === 'reduced' ? 'full' : 'reduced';
-  localStorage.setItem('holdem_motion_mode', uiMotionMode);
-  applyMotionMode();
-  refreshMotionButton();
-});
+if (el.motionToggleBtn) {
+  el.motionToggleBtn.addEventListener('click', () => {
+    uiMotionMode = uiMotionMode === 'reduced' ? 'full' : 'reduced';
+    localStorage.setItem('holdem_motion_mode', uiMotionMode);
+    applyMotionMode();
+    refreshMotionButton();
+  });
+}
 
-el.sideToggleBtn.addEventListener('click', () => {
-  const willCollapse = !uiSideCollapsed;
-  setSideCollapsed(willCollapse, true);
-  showHandBanner(willCollapse ? '已收起边栏' : '已展开边栏', willCollapse ? 'info' : 'ok', 800);
-});
+if (el.sideToggleBtn) {
+  el.sideToggleBtn.addEventListener('click', () => {
+    const willCollapse = !uiSideCollapsed;
+    setSideCollapsed(willCollapse, true);
+    if (!willCollapse) setSideTab('settings', true);
+    showHandBanner(willCollapse ? '已收起设置边栏' : '已展开设置边栏', willCollapse ? 'info' : 'ok', 800);
+  });
+}
 
 sideTabButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -3436,8 +3602,16 @@ document.addEventListener('click', (evt) => {
   const target = evt.target;
   if (!(target instanceof Element)) return;
   if (el.sidePanel.contains(target)) return;
-  if (el.sideToggleBtn.contains(target)) return;
+  if (el.sideToggleBtn?.contains(target)) return;
   setSideCollapsed(true, true);
+});
+
+document.addEventListener('click', (evt) => {
+  const target = evt.target;
+  if (!(target instanceof Element)) return;
+  if (target.closest('#seatInteractMenu')) return;
+  if (target.closest('.seat-node')) return;
+  closeSeatInteractMenu();
 });
 
 if (el.sideDrawerBackdrop) {
@@ -3456,21 +3630,25 @@ el.actionPanelToggleBtn.addEventListener('click', () => {
 el.profitFilterAllBtn.addEventListener('click', () => setProfitFilter('all'));
 el.profitFilterMeBtn.addEventListener('click', () => setProfitFilter('me'));
 
-el.densityToggleBtn.addEventListener('click', () => {
-  uiSeatDensity = uiSeatDensity === 'compact' ? 'auto' : 'compact';
-  localStorage.setItem('holdem_seat_density', uiSeatDensity);
-  refreshDensityButton();
-  if (roomState) renderSeatMap();
-});
+if (el.densityToggleBtn) {
+  el.densityToggleBtn.addEventListener('click', () => {
+    uiSeatDensity = uiSeatDensity === 'compact' ? 'auto' : 'compact';
+    localStorage.setItem('holdem_seat_density', uiSeatDensity);
+    refreshDensityButton();
+    if (roomState) renderSeatMap();
+  });
+}
 
-el.focusMeBtn.addEventListener('click', () => {
-  const mine = el.seatMap.querySelector('.seat-node.me');
-  if (!mine) return;
-  mine.classList.remove('spotlight');
-  void mine.offsetWidth;
-  mine.classList.add('spotlight');
-  mine.scrollIntoView({ behavior: uiMotionMode === 'reduced' ? 'auto' : 'smooth', block: 'center', inline: 'center' });
-});
+if (el.focusMeBtn) {
+  el.focusMeBtn.addEventListener('click', () => {
+    const mine = el.seatMap.querySelector('.seat-node.me');
+    if (!mine) return;
+    mine.classList.remove('spotlight');
+    void mine.offsetWidth;
+    mine.classList.add('spotlight');
+    mine.scrollIntoView({ behavior: uiMotionMode === 'reduced' ? 'auto' : 'smooth', block: 'center', inline: 'center' });
+  });
+}
 
 el.changeSeatBtn.addEventListener('click', () => {
   if (!canSelfChangeSeat()) {
@@ -3679,31 +3857,25 @@ if (el.socialSoundBtn) {
   });
 }
 
-if (el.clearSocialTargetBtn) {
-  el.clearSocialTargetBtn.addEventListener('click', () => {
-    socialTargetId = '';
-    refreshSocialTargetState();
-    renderSeatMap();
-  });
-}
-
 quickEmoteButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
     const code = String(btn.dataset.emoteCode || '').trim();
     if (!code) return;
     sendEmote('quick', code);
+    collapseSocialDockAfterSend();
   });
 });
 
 propEmoteButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
     const code = String(btn.dataset.emoteCode || '').trim();
-    const targetId = String(socialTargetId || '');
+    const targetId = String(seatInteractTargetId || '');
     if (!code || !targetId) {
       showNotice(el.tableNotice, '请先点击玩家卡片选择互动目标', 'error');
       return;
     }
     sendEmote('prop', code, targetId);
+    collapseSocialDockAfterSend();
   });
 });
 
@@ -3712,6 +3884,7 @@ if (el.counterBtn) {
     if (!socialCounterState?.fromId || !socialCounterState?.code) return;
     sendEmote('prop', socialCounterState.code, socialCounterState.fromId, true);
     clearSocialCounter();
+    collapseSocialDockAfterSend();
   });
 }
 
@@ -3720,6 +3893,7 @@ if (el.socialChatSendBtn) {
     if (!el.socialChatInput) return;
     if (sendSocialChatMessage(el.socialChatInput.value, { overlay: true })) {
       el.socialChatInput.value = '';
+      collapseSocialDockAfterSend();
     }
   });
 }
@@ -3730,15 +3904,18 @@ if (el.socialChatInput) {
     evt.preventDefault();
     if (sendSocialChatMessage(el.socialChatInput.value, { overlay: true })) {
       el.socialChatInput.value = '';
+      collapseSocialDockAfterSend();
     }
   });
 }
 
-el.sendChatBtn.addEventListener('click', () => {
-  if (sendSocialChatMessage(el.chatInput.value, { overlay: false })) {
-    el.chatInput.value = '';
-  }
-});
+if (el.sendChatBtn && el.chatInput) {
+  el.sendChatBtn.addEventListener('click', () => {
+    if (sendSocialChatMessage(el.chatInput.value, { overlay: false })) {
+      el.chatInput.value = '';
+    }
+  });
+}
 
 if (el.rebuyConfirmBtn) {
   el.rebuyConfirmBtn.addEventListener('click', () => {
@@ -3755,9 +3932,11 @@ if (el.rebuyDeclineBtn) {
   });
 }
 
-el.chatInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') el.sendChatBtn.click();
-});
+if (el.chatInput && el.sendChatBtn) {
+  el.chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') el.sendChatBtn.click();
+  });
+}
 
 el.nameInput.addEventListener('change', persistName);
 

@@ -5,6 +5,9 @@
   --card: rgba(8, 27, 19, 0.78);
   --card-soft: rgba(255, 255, 255, 0.06);
   --line: rgba(255, 255, 255, 0.14);
+  --bg-glow-1: rgba(232, 187, 97, 0.12);
+  --bg-glow-2: rgba(106, 211, 168, 0.12);
+  --bg-glow-3: rgba(255, 255, 255, 0.06);
   --text: #eff8f0;
   --muted: #b6d4bd;
   --gold: #e8bb61;
@@ -22,7 +25,10 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: linear-gradient(120deg, var(--bg-1), var(--bg-2) 45%, var(--bg-3));
+  background:
+    radial-gradient(circle at 12% 14%, var(--bg-glow-1), transparent 36%),
+    radial-gradient(circle at 86% 10%, var(--bg-glow-2), transparent 34%),
+    linear-gradient(118deg, var(--bg-1), var(--bg-2) 45%, var(--bg-3));
   color: var(--text);
   font-family: 'Noto Sans SC', sans-serif;
   transition: background 240ms ease;
@@ -33,12 +39,22 @@ body[data-theme='forest'] {
   --bg-1: #072218;
   --bg-2: #13422d;
   --bg-3: #1f5a3c;
+  --card: rgba(8, 27, 19, 0.78);
+  --line: rgba(255, 255, 255, 0.14);
+  --bg-glow-1: rgba(232, 187, 97, 0.12);
+  --bg-glow-2: rgba(106, 211, 168, 0.12);
+  --bg-glow-3: rgba(255, 255, 255, 0.06);
 }
 
 body[data-theme='ocean'] {
   --bg-1: #071a2a;
   --bg-2: #103652;
   --bg-3: #1a4f74;
+  --card: rgba(7, 25, 39, 0.8);
+  --line: rgba(157, 213, 245, 0.2);
+  --bg-glow-1: rgba(135, 212, 255, 0.16);
+  --bg-glow-2: rgba(73, 152, 214, 0.16);
+  --bg-glow-3: rgba(203, 238, 255, 0.08);
   --gold: #87d4ff;
   --gold-2: #b7e6ff;
   --ok: #2f9ba1;
@@ -50,6 +66,11 @@ body[data-theme='sunset'] {
   --bg-1: #2a1009;
   --bg-2: #5a2615;
   --bg-3: #8a3b1e;
+  --card: rgba(39, 16, 9, 0.8);
+  --line: rgba(255, 198, 152, 0.22);
+  --bg-glow-1: rgba(255, 193, 124, 0.2);
+  --bg-glow-2: rgba(255, 133, 92, 0.18);
+  --bg-glow-3: rgba(255, 225, 191, 0.08);
   --gold: #ffb26b;
   --gold-2: #ffd7ad;
   --ok: #2d9658;
@@ -78,7 +99,10 @@ body[data-motion='reduced'] .cappuccino-msg,
 body[data-motion='reduced'] .emote-bubble,
 body[data-motion='reduced'] .emote-shot,
 body[data-motion='reduced'] .emote-impact,
-body[data-motion='reduced'] .social-msg-bubble {
+body[data-motion='reduced'] .social-msg-bubble,
+body[data-motion='reduced'] .moneybag-main,
+body[data-motion='reduced'] .moneybag-burst,
+body[data-motion='reduced'] .moneybag-amount {
   animation: none !important;
 }
 
@@ -86,8 +110,10 @@ body[data-motion='reduced'] .social-msg-bubble {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(circle at 20% 20%, rgba(232, 187, 97, 0.08), transparent 38%),
-    radial-gradient(circle at 90% 10%, rgba(255, 255, 255, 0.08), transparent 26%);
+  background:
+    radial-gradient(circle at 20% 20%, var(--bg-glow-1), transparent 38%),
+    radial-gradient(circle at 90% 10%, var(--bg-glow-3), transparent 26%),
+    radial-gradient(circle at 52% 92%, var(--bg-glow-2), transparent 38%);
 }
 
 .app {
@@ -382,7 +408,7 @@ body.side-drawer-open {
 
 .side-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
   gap: 6px;
   margin-bottom: 10px;
 }
@@ -404,6 +430,16 @@ body.side-drawer-open {
 
 .side-pane.active {
   display: block;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.settings-grid .btn {
+  min-width: 0;
 }
 
 h2,
@@ -883,10 +919,10 @@ input[type='checkbox'] {
   overflow: hidden;
 }
 
+.settings-launcher,
 .social-launcher {
   position: absolute;
   left: 10px;
-  bottom: 10px;
   width: 48px;
   height: 48px;
   border-radius: 999px;
@@ -903,10 +939,20 @@ input[type='checkbox'] {
   z-index: 7;
 }
 
+.settings-launcher {
+  bottom: 66px;
+}
+
+.social-launcher {
+  bottom: 10px;
+}
+
+.settings-launcher:hover,
 .social-launcher:hover {
   border-color: rgba(255, 233, 176, 0.8);
 }
 
+.settings-launcher.active,
 .social-launcher.active {
   border-color: rgba(255, 233, 176, 0.95);
   box-shadow:
@@ -914,6 +960,7 @@ input[type='checkbox'] {
     0 0 0 2px rgba(255, 220, 140, 0.24);
 }
 
+.settings-launcher .icon,
 .social-launcher .icon {
   font-size: 20px;
   line-height: 1;
@@ -934,6 +981,38 @@ input[type='checkbox'] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.seat-interact-menu {
+  position: absolute;
+  min-width: 206px;
+  max-width: 240px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 223, 154, 0.42);
+  background: linear-gradient(160deg, rgba(10, 20, 14, 0.94), rgba(18, 30, 22, 0.92));
+  box-shadow: 0 14px 24px rgba(0, 0, 0, 0.38);
+  padding: 8px;
+  z-index: 9;
+  pointer-events: auto;
+}
+
+.seat-interact-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffe5af;
+  margin-bottom: 6px;
+}
+
+.seat-interact-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.seat-prop-btn.btn.tiny {
+  min-width: 0;
+  padding: 5px 6px;
+  font-size: 11px;
 }
 
 .social-dock {
@@ -990,28 +1069,10 @@ input[type='checkbox'] {
   min-width: 56px;
 }
 
-.social-target-info {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  border-radius: 9px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(0, 0, 0, 0.26);
-  color: #d8ebdd;
+.social-tip {
+  margin: 0;
   font-size: 12px;
-  padding: 6px 8px;
-}
-
-.social-target-info span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.social-target-info .btn.tiny {
-  padding: 3px 7px;
-  flex: 0 0 auto;
+  color: #cce0d0;
 }
 
 .social-counter {
@@ -1350,6 +1411,97 @@ input[type='checkbox'] {
   white-space: nowrap;
   opacity: 0;
   animation: cappuccinoMsg 4200ms ease-out 620ms forwards;
+}
+
+.moneybag-celebration {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.moneybag-burst {
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle, rgba(255, 236, 185, 0.4), rgba(255, 236, 185, 0) 62%),
+    radial-gradient(circle, rgba(255, 171, 93, 0.28), rgba(255, 171, 93, 0) 72%);
+  animation: moneybagBurst 1000ms ease-out forwards;
+}
+
+.moneybag-main {
+  position: relative;
+  width: 168px;
+  height: 168px;
+  transform: scale(0.56);
+  opacity: 0;
+  animation: moneybagZoom 1000ms cubic-bezier(0.22, 0.74, 0.25, 1) forwards;
+}
+
+.moneybag-knot {
+  position: absolute;
+  left: 50%;
+  top: 20px;
+  width: 62px;
+  height: 34px;
+  border-radius: 16px;
+  border: 2px solid rgba(255, 232, 181, 0.66);
+  background: linear-gradient(180deg, rgba(146, 87, 38, 0.96), rgba(95, 54, 21, 0.94));
+  transform: translateX(-50%);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+}
+
+.moneybag-body {
+  position: absolute;
+  left: 50%;
+  top: 42px;
+  width: 128px;
+  height: 112px;
+  border-radius: 56% 56% 48% 48%;
+  border: 2px solid rgba(255, 226, 162, 0.72);
+  background:
+    radial-gradient(circle at 45% 28%, rgba(255, 229, 170, 0.48), rgba(255, 229, 170, 0) 42%),
+    linear-gradient(170deg, rgba(190, 128, 58, 0.96), rgba(115, 72, 29, 0.96));
+  transform: translateX(-50%);
+  box-shadow:
+    0 22px 30px rgba(0, 0, 0, 0.38),
+    inset 0 -14px 22px rgba(75, 42, 15, 0.4);
+}
+
+.moneybag-mark {
+  position: absolute;
+  left: 50%;
+  top: 88px;
+  transform: translateX(-50%);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 52px;
+  font-weight: 700;
+  color: rgba(255, 246, 218, 0.96);
+  text-shadow:
+    0 2px 0 rgba(84, 42, 14, 0.6),
+    0 10px 16px rgba(0, 0, 0, 0.3);
+}
+
+.moneybag-amount {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 92px);
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 235, 176, 0.56);
+  background: rgba(12, 18, 13, 0.78);
+  color: #ffe7b5;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  opacity: 0;
+  animation: moneybagAmount 1000ms ease-out forwards;
 }
 
 .seat-node {
@@ -2167,6 +2319,54 @@ input[type='checkbox'] {
   }
 }
 
+@keyframes moneybagBurst {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.06);
+    opacity: 0;
+  }
+}
+
+@keyframes moneybagZoom {
+  0% {
+    transform: scale(0.56);
+    opacity: 0;
+  }
+  26% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  58% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+}
+
+@keyframes moneybagAmount {
+  0% {
+    transform: translateX(-50%) translateY(8px);
+    opacity: 0;
+  }
+  32% {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-50%) translateY(-4px);
+    opacity: 0;
+  }
+}
+
 @keyframes emoteBubbleFloat {
   0% {
     transform: translate(calc(var(--bx) - 50%), calc(var(--by) - 50%)) translateY(7px) scale(0.84);
@@ -2760,13 +2960,22 @@ input[type='checkbox'] {
     padding-bottom: 120px;
   }
 
+  .settings-launcher,
   .social-launcher {
     left: 8px;
-    bottom: 8px;
     width: 44px;
     height: 44px;
   }
 
+  .settings-launcher {
+    bottom: 60px;
+  }
+
+  .social-launcher {
+    bottom: 8px;
+  }
+
+  .settings-launcher .icon,
   .social-launcher .icon {
     font-size: 18px;
   }
@@ -2784,13 +2993,9 @@ input[type='checkbox'] {
     min-width: 52px;
   }
 
-  .social-target-info {
-    gap: 6px;
-    font-size: 11px;
-  }
-
-  .social-target-info span {
-    white-space: normal;
+  .seat-interact-menu {
+    min-width: 180px;
+    max-width: 208px;
   }
 
   .social-chat-feed {
@@ -2965,11 +3170,19 @@ input[type='checkbox'] {
     padding-bottom: 188px;
   }
 
+  .settings-launcher,
   .social-launcher {
     left: 6px;
-    bottom: 6px;
     width: 42px;
     height: 42px;
+  }
+
+  .settings-launcher {
+    bottom: 54px;
+  }
+
+  .social-launcher {
+    bottom: 6px;
   }
 
   .social-head {
@@ -3084,11 +3297,19 @@ input[type='checkbox'] {
     padding-bottom: 84px;
   }
 
+  .settings-launcher,
   .social-launcher {
     left: 6px;
-    bottom: 4px;
     width: 40px;
     height: 40px;
+  }
+
+  .settings-launcher {
+    bottom: 48px;
+  }
+
+  .social-launcher {
+    bottom: 4px;
   }
 
   .social-dock {

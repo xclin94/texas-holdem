@@ -169,12 +169,6 @@
             <button id="readyBtn" class="btn">准备</button>
             <button id="rebuyBtn" class="btn hidden">重新买入</button>
             <button id="changeSeatBtn" class="btn ghost">换座</button>
-            <button id="themeToggleBtn" class="btn ghost">主题：森林</button>
-            <button id="soundToggleBtn" class="btn ghost">提示音：开</button>
-            <button id="motionToggleBtn" class="btn ghost">动效：标准</button>
-            <button id="sideToggleBtn" class="btn ghost">收起边栏</button>
-            <button id="densityToggleBtn" class="btn ghost">紧凑视图</button>
-            <button id="focusMeBtn" class="btn ghost">定位我的座位</button>
             <button id="takeSeatBtn" class="btn hidden">入座</button>
             <button id="becomeSpectatorBtn" class="btn hidden">转观战</button>
           </div>
@@ -244,6 +238,10 @@
               </div>
               <div id="seatMap" class="seat-map"></div>
               <div id="emoteLayer" class="emote-layer"></div>
+              <div id="seatInteractMenu" class="seat-interact-menu hidden" aria-hidden="true"></div>
+              <button id="sideToggleBtn" class="settings-launcher" aria-label="打开设置边栏" title="设置">
+                <span class="icon">⚙</span>
+              </button>
               <button id="socialLauncherBtn" class="social-launcher" aria-label="打开互动面板" title="互动">
                 <span class="icon">💬</span>
                 <span id="socialLauncherBadge" class="social-launcher-badge hidden">0</span>
@@ -252,16 +250,11 @@
                 <div class="social-head">
                   <strong>互动</strong>
                   <div class="social-head-actions">
-                    <button id="socialSoundBtn" class="btn tiny ghost">音效:经典</button>
-                    <button id="socialAnimBtn" class="btn tiny ghost">动画:开</button>
                     <button id="socialCollapseBtn" class="btn tiny">关闭</button>
                   </div>
                 </div>
                 <div id="socialBody" class="social-body">
-                  <div class="social-target-info">
-                    <span id="socialTargetHint">点击牌桌上的玩家卡片选择互动对象</span>
-                    <button id="clearSocialTargetBtn" class="btn tiny ghost hidden">清除目标</button>
-                  </div>
+                  <p class="social-tip">点击任意玩家座位，可弹出互动道具菜单。</p>
                   <div class="social-row">
                     <button class="btn tiny quick-emote-btn" data-emote-code="like">👍 点赞</button>
                     <button class="btn tiny quick-emote-btn" data-emote-code="laugh">😂 爆笑</button>
@@ -269,14 +262,6 @@
                     <button class="btn tiny quick-emote-btn" data-emote-code="cry">😭 哭了</button>
                     <button class="btn tiny quick-emote-btn" data-emote-code="666">🔥 666</button>
                     <button class="btn tiny quick-emote-btn" data-emote-code="heart">❤️ 比心</button>
-                  </div>
-                  <div class="social-row social-target-row">
-                    <button class="btn tiny prop-emote-btn" data-emote-code="egg">🥚 鸡蛋</button>
-                    <button class="btn tiny prop-emote-btn" data-emote-code="flower">🌹 送花</button>
-                    <button class="btn tiny prop-emote-btn" data-emote-code="water">💦 泼水</button>
-                    <button class="btn tiny prop-emote-btn" data-emote-code="rocket">🚀 火箭</button>
-                    <button class="btn tiny prop-emote-btn" data-emote-code="kiss">😘 飞吻</button>
-                    <button class="btn tiny prop-emote-btn" data-emote-code="tomato">🍅 番茄</button>
                   </div>
                   <div id="counterRow" class="social-counter hidden">
                     <span id="counterText">被互动了，是否反击？</span>
@@ -362,8 +347,8 @@
               <button class="btn tiny side-tab-btn active" data-side-tab="chips">筹码</button>
               <button class="btn tiny side-tab-btn" data-side-tab="chart">曲线</button>
               <button class="btn tiny side-tab-btn" data-side-tab="history">战绩</button>
-              <button class="btn tiny side-tab-btn" data-side-tab="chat">聊天</button>
               <button class="btn tiny side-tab-btn" data-side-tab="room">房间</button>
+              <button class="btn tiny side-tab-btn" data-side-tab="settings">设置</button>
             </div>
 
             <section class="side-pane active" data-side-pane="chips">
@@ -465,6 +450,17 @@
               <div id="spectatorsList" class="spectators"></div>
               <h3>封禁列表</h3>
               <div id="bannedList" class="spectators"></div>
+            </section>
+
+            <section class="side-pane" data-side-pane="settings">
+              <h3>视觉与音效</h3>
+              <div class="settings-grid">
+                <button id="themeToggleBtn" class="btn">主题：森林</button>
+                <button id="soundToggleBtn" class="btn">提示音：开</button>
+                <button id="motionToggleBtn" class="btn">动效：标准</button>
+                <button id="socialAnimBtn" class="btn">互动动画：开</button>
+                <button id="socialSoundBtn" class="btn">互动音效：经典</button>
+              </div>
             </section>
           </aside>
         </div>
