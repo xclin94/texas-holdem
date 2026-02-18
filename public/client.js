@@ -47,6 +47,9 @@ let trackedLastActionByPlayerId = new Map();
 let localActionCueEchoes = [];
 let pendingPotPushAnimation = null;
 let potPushCleanupTimer = null;
+let pendingCappuccinoCelebration = null;
+let cappuccinoCleanupTimer = null;
+let trackedCappuccinoHandNo = null;
 let trackedSeatedPlayerIds = new Set();
 let seatJoinCueKnown = false;
 
@@ -1070,6 +1073,63 @@ function flushPendingPotPushAnimation() {
   const payload = pendingPotPushAnimation;
   pendingPotPushAnimation = null;
   runPotPushAnimation(payload);
+}
+
+function clearCappuccinoCelebration() {
+  if (cappuccinoCleanupTimer) {
+    clearTimeout(cappuccinoCleanupTimer);
+    cappuccinoCleanupTimer = null;
+  }
+  const node = el.tableCanvas?.querySelector('.cappuccino-celebration');
+  if (node) node.remove();
+}
+
+function queueCappuccinoCelebration(handNo, amount) {
+  pendingCappuccinoCelebration = {
+    handNo: Number(handNo) || 0,
+    amount: Math.max(0, Number(amount) || 0),
+  };
+}
+
+function runCappuccinoCelebration(payload) {
+  if (!payload || !el.tableCanvas) return;
+  if (uiMotionMode === 'reduced') {
+    showHandBanner(`女仆送来卡布奇诺 +${payload.amount}`, 'ok', 1700);
+    return;
+  }
+
+  clearCappuccinoCelebration();
+
+  const node = document.createElement('div');
+  node.className = 'cappuccino-celebration';
+  node.setAttribute('aria-hidden', 'true');
+  node.innerHTML = `
+    <div class="cappuccino-scene">
+      <div class="maid-card">
+        <span class="maid-icon">🧑‍🍳</span>
+        <span class="maid-text">女仆上线</span>
+      </div>
+      <div class="cup-card">☕ 卡布奇诺</div>
+      <div class="coffee-pour"></div>
+      <div class="cappuccino-msg">大胜 +${payload.amount}，请你喝一杯</div>
+    </div>
+  `;
+  el.tableCanvas.appendChild(node);
+
+  cappuccinoCleanupTimer = setTimeout(() => {
+    node.remove();
+    if (cappuccinoCleanupTimer) {
+      clearTimeout(cappuccinoCleanupTimer);
+      cappuccinoCleanupTimer = null;
+    }
+  }, 3600);
+}
+
+function flushPendingCappuccinoCelebration() {
+  if (!pendingCappuccinoCelebration) return;
+  const payload = pendingCappuccinoCelebration;
+  pendingCappuccinoCelebration = null;
+  runCappuccinoCelebration(payload);
 }
 
 function suitSymbol(s) {
@@ -2413,9 +2473,12 @@ function renderStatus() {
     trackedHandNo = null;
     trackedPhase = null;
     trackedResultHandNo = null;
+    trackedCappuccinoHandNo = null;
     trackedSeatDealHandNo = null;
     trackedTurnCueToken = null;
     pendingPotPushAnimation = null;
+    pendingCappuccinoCelebration = null;
+    clearCappuccinoCelebration();
     resetCommunityRevealState(null);
     raiseUiExpanded = false;
     clearPreAction(true);
@@ -2424,6 +2487,7 @@ function renderStatus() {
       trackedHandNo = g.handNo;
       resetCommunityRevealState(g.handNo);
       trackedPhase = g.phase;
+      if (trackedCappuccinoHandNo !== g.handNo) trackedCappuccinoHandNo = null;
       trackedTurnCueToken = null;
       raiseUiExpanded = false;
       clearPreAction(true);
@@ -2438,6 +2502,15 @@ function renderStatus() {
       const firstWinner = g.result?.winners?.[0];
       showHandBanner(firstWinner ? `${firstWinner.name || roomMemberName(firstWinner.playerId)} 赢下本手` : '本手结束', 'ok', 2100);
       queuePotPushAnimation(g.handNo, g.result);
+      const myWin = Math.max(
+        0,
+        Number((g.result?.winners || []).find((w) => w?.playerId === meId)?.amount) || 0,
+      );
+      const halfBuyIn = Math.max(1, Math.floor((Number(roomState?.settings?.startingStack) || 0) / 2));
+      if (myWin > halfBuyIn && trackedCappuccinoHandNo !== g.handNo) {
+        trackedCappuccinoHandNo = g.handNo;
+        queueCappuccinoCelebration(g.handNo, myWin);
+      }
     }
   }
 
@@ -2651,6 +2724,7 @@ function renderRoom() {
   renderCommunity();
   renderSeatMap();
   flushPendingPotPushAnimation();
+  flushPendingCappuccinoCelebration();
   renderSpectators();
   renderStats();
   renderBanned();
@@ -2730,6 +2804,9 @@ socket.on('disconnect', () => {
   resetCommunityRevealState(null);
   clearPotPushAnimationLayer();
   pendingPotPushAnimation = null;
+  clearCappuccinoCelebration();
+  pendingCappuccinoCelebration = null;
+  trackedCappuccinoHandNo = null;
   if (el.lobbyView.classList.contains('hidden')) {
     showNotice(el.tableNotice, '连接已断开，正在尝试重连...', 'error');
   } else {
@@ -2745,6 +2822,9 @@ socket.on('connect_error', () => {
   resetCommunityRevealState(null);
   clearPotPushAnimationLayer();
   pendingPotPushAnimation = null;
+  clearCappuccinoCelebration();
+  pendingCappuccinoCelebration = null;
+  trackedCappuccinoHandNo = null;
   if (el.lobbyView.classList.contains('hidden')) {
     showNotice(el.tableNotice, '连接失败，请检查网络后重试', 'error');
   } else {
@@ -2759,6 +2839,9 @@ socket.on('joinedRoom', ({ playerId }) => {
   resetSeatJoinCueTracking();
   clearPotPushAnimationLayer();
   pendingPotPushAnimation = null;
+  clearCappuccinoCelebration();
+  pendingCappuccinoCelebration = null;
+  trackedCappuccinoHandNo = null;
   raiseUiExpanded = false;
   seatPickMode = false;
   clearPreAction(true);
@@ -2806,6 +2889,9 @@ socket.on('kicked', (payload) => {
   resetSeatJoinCueTracking();
   clearPotPushAnimationLayer();
   pendingPotPushAnimation = null;
+  clearCappuccinoCelebration();
+  pendingCappuccinoCelebration = null;
+  trackedCappuccinoHandNo = null;
   raiseUiExpanded = false;
   seatPickMode = false;
   clearPreAction(true);
@@ -2991,6 +3077,9 @@ el.leaveBtn.addEventListener('click', () => {
   resetSeatJoinCueTracking();
   clearPotPushAnimationLayer();
   pendingPotPushAnimation = null;
+  clearCappuccinoCelebration();
+  pendingCappuccinoCelebration = null;
+  trackedCappuccinoHandNo = null;
   raiseUiExpanded = false;
   seatPickMode = false;
   clearPreAction(true);
