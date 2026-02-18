@@ -1534,7 +1534,7 @@ function phaseLabel(phase) {
     flop: '翻牌圈',
     turn: '转牌圈',
     river: '河牌圈',
-    finished: '本手结束',
+    finished: '结算中',
   }[phase] || '等待开局';
 }
 
@@ -2782,7 +2782,7 @@ function renderStatus() {
     if (g.finished && trackedResultHandNo !== g.handNo) {
       trackedResultHandNo = g.handNo;
       const firstWinner = g.result?.winners?.[0];
-      showHandBanner(firstWinner ? `${firstWinner.name || roomMemberName(firstWinner.playerId)} 赢下本手` : '本手结束', 'ok', 2100);
+      showHandBanner(firstWinner ? `${firstWinner.name || roomMemberName(firstWinner.playerId)} 赢下本手` : '结算完成', 'ok', 2100);
       queuePotPushAnimation(g.handNo, g.result);
       const myWin = Math.max(
         0,

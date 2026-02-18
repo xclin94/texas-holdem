@@ -322,6 +322,7 @@ test('auto next hand countdown uses 3 seconds and starts automatically', async (
     (next) => next?.game?.handNo === handNo && next.game.finished && Boolean(next.autoStartAt),
   );
 
+  assert.equal(state.hasStartedOnce, true);
   assert.equal(state.autoStartDelayMs, 3000);
   const deltaMs = Number(state.autoStartAt) - Number(state.serverNow);
   assert.equal(deltaMs > 2200 && deltaMs <= 3400, true);
@@ -333,6 +334,36 @@ test('auto next hand countdown uses 3 seconds and starts automatically', async (
     EVENT_TIMEOUT_MS + 5000,
   );
   assert.equal(nextHand.game.handNo, handNo + 1);
+});
+
+test('turn timeout action is delayed for visual pacing', async (t) => {
+  const { sockets } = await setupPlayers(t, 2, { allowStraddle: false, turnTimeSec: 8 });
+  const [host] = sockets;
+
+  const started = waitForEvent(
+    host,
+    'roomState',
+    (state) => state?.game && !state.game.finished && state.game.phase === 'preflop' && Boolean(state.game.turnId),
+  );
+  host.emit('startHand');
+  const firstState = await started;
+  const firstTurnId = firstState.game.turnId;
+  const firstServerTs = Number(firstState.serverNow);
+
+  const advanced = await waitForEvent(
+    host,
+    'roomState',
+    (state) =>
+      state?.game &&
+      !state.game.finished &&
+      state.game.phase === 'preflop' &&
+      Boolean(state.game.turnId) &&
+      state.game.turnId !== firstTurnId,
+    EVENT_TIMEOUT_MS + 6000,
+  );
+  const elapsed = Number(advanced.serverNow) - firstServerTs;
+  assert.equal(elapsed >= 8400, true);
+  assert.equal(elapsed <= 12000, true);
 });
 
 test('finished table keeps auto countdown with one player and restarts immediately when another sits', async (t) => {
