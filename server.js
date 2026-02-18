@@ -4,7 +4,9 @@ const http = require('http');
 const { Server } = require('socket.io');
 
 const PORT = Number(process.env.HOLDEM_PORT || 3000);
-const AUTO_NEXT_HAND_DELAY_MS = 5500;
+const AUTO_NEXT_HAND_DELAY_MS = 3000;
+const TURN_TIMEOUT_ACTION_DELAY_MS = 800;
+const DISCONNECT_GRACE_MS = 3 * 60 * 1000;
 const EMOTE_LIMIT_WINDOW_MS = 60 * 1000;
 const EMOTE_LIMIT_COUNT = 20;
 const EMOTE_MIN_INTERVAL_MS = 350;
@@ -96,6 +98,11 @@ function sanitizeRoomName(name) {
 function sanitizePassword(password) {
   if (typeof password !== 'string') return '';
   return password.trim().slice(0, 24);
+}
+
+function sanitizeReconnectKey(key) {
+  if (typeof key !== 'string') return '';
+  return key.trim().slice(0, 96);
 }
 
 function normalizeBanKey(name) {
@@ -316,6 +323,126 @@ function getRole(room, memberId) {
   return null;
 }
 
+function ensureDisconnectTimerMap(room) {
+  if (!room.disconnectTimers) room.disconnectTimers = new Map();
+  return room.disconnectTimers;
+}
+
+function clearDisconnectTimer(room, memberId) {
+  if (!room || !memberId || !room.disconnectTimers) return;
+  const timer = room.disconnectTimers.get(memberId);
+  if (timer) {
+    clearTimeout(timer);
+    room.disconnectTimers.delete(memberId);
+  }
+}
+
+function remapMemberRefs(room, oldId, newId) {
+  if (!room || !oldId || !newId || oldId === newId) return;
+  if (room.hostId === oldId) room.hostId = newId;
+  clearDisconnectTimer(room, oldId);
+
+  const game = room.game;
+  if (!game) return;
+
+  if (Array.isArray(game.order)) {
+    game.order = game.order.map((id) => (id === oldId ? newId : id));
+  }
+  if (Array.isArray(game.pending)) {
+    game.pending = game.pending.map((id) => (id === oldId ? newId : id));
+  }
+  if (game.turnId === oldId) game.turnId = newId;
+  if (game.dealerId === oldId) game.dealerId = newId;
+  if (game.smallBlindId === oldId) game.smallBlindId = newId;
+  if (game.bigBlindId === oldId) game.bigBlindId = newId;
+  if (game.straddlePlayerId === oldId) game.straddlePlayerId = newId;
+
+  if (game.result?.winners?.length) {
+    game.result.winners = game.result.winners.map((w) => (w?.playerId === oldId ? { ...w, playerId: newId } : w));
+  }
+  if (game.result?.sidePots?.length) {
+    game.result.sidePots = game.result.sidePots.map((pot) => ({
+      ...pot,
+      winners: (pot.winners || []).map((id) => (id === oldId ? newId : id)),
+    }));
+  }
+  if (game.result?.revealed && typeof game.result.revealed === 'object') {
+    const nextRevealed = {};
+    Object.entries(game.result.revealed).forEach(([k, v]) => {
+      nextRevealed[k === oldId ? newId : k] = v;
+    });
+    game.result.revealed = nextRevealed;
+  }
+}
+
+function findReconnectCandidate(room, reconnectKey, spectatorMode = false) {
+  if (!room || !reconnectKey) return null;
+  if (spectatorMode) {
+    const spectator = room.spectators.find((s) => s.reconnectKey === reconnectKey && !s.connected);
+    if (spectator) return { role: 'spectator', member: spectator };
+    const player = room.players.find((p) => p.reconnectKey === reconnectKey && !p.connected && !p.removeAfterHand);
+    if (player) return { role: 'player', member: player };
+    return null;
+  }
+  const player = room.players.find((p) => p.reconnectKey === reconnectKey && !p.connected && !p.removeAfterHand);
+  if (player) return { role: 'player', member: player };
+  const spectator = room.spectators.find((s) => s.reconnectKey === reconnectKey && !s.connected);
+  if (spectator) return { role: 'spectator', member: spectator };
+  return null;
+}
+
+function reclaimDisconnectedMember(socket, room, name, reconnectKey, spectatorMode = false) {
+  const candidate = findReconnectCandidate(room, reconnectKey, spectatorMode);
+  if (!candidate) return null;
+  const { role, member } = candidate;
+  const oldId = member.id;
+  const newId = socket.id;
+
+  member.id = newId;
+  member.connected = true;
+  member.disconnectedAt = null;
+  member.removeAfterHand = false;
+  if (name) member.name = name;
+  if (reconnectKey) member.reconnectKey = reconnectKey;
+
+  remapMemberRefs(room, oldId, newId);
+  socket.join(room.id);
+  socket.data.roomId = room.id;
+  socket.data.role = role;
+
+  logRoom(room, `${member.name} 断线重连成功`);
+  return { ok: true, role, recovered: true };
+}
+
+function scheduleDisconnectCleanup(room, memberId, role) {
+  if (!room || !memberId) return;
+  clearDisconnectTimer(room, memberId);
+  const map = ensureDisconnectTimerMap(room);
+  const timer = setTimeout(() => {
+    map.delete(memberId);
+    if (!rooms.has(room.id)) return;
+    const player = getPlayer(room, memberId);
+    const spectator = getSpectator(room, memberId);
+    if (role === 'player' && player && !player.connected) {
+      if (player.inHand) {
+        scheduleDisconnectCleanup(room, memberId, role);
+        return;
+      }
+      removePlayerFromRoom(room, memberId);
+      logRoom(room, `${player.name} 断线超时，已自动离座`);
+    } else if (role === 'spectator' && spectator && !spectator.connected) {
+      removeSpectatorFromRoom(room, memberId);
+      logRoom(room, `${spectator.name} 断线超时，已自动离开观战`);
+    }
+    cleanupDisconnected(room);
+    if (rooms.has(room.id)) {
+      broadcastRoom(room);
+    }
+    broadcastLobby();
+  }, DISCONNECT_GRACE_MS);
+  map.set(memberId, timer);
+}
+
 function nextSeat(room) {
   const used = new Set(room.players.map((p) => p.seat));
   for (let i = 1; i <= room.settings.maxPlayers; i += 1) {
@@ -345,6 +472,9 @@ function initPlayer(player, startingStack) {
   if (!Number.isFinite(player.rebuyCount)) player.rebuyCount = 0;
   if (!Number.isFinite(player.rebuyTotal)) player.rebuyTotal = 0;
   if (!Number.isFinite(player.lastActionSeq)) player.lastActionSeq = 0;
+  player.connected = true;
+  player.disconnectedAt = null;
+  player.removeAfterHand = false;
   player.ready = true;
   player.stack = startingStack;
   resetHandFlags(player);
@@ -734,17 +864,30 @@ function advanceTurn(room, fromPlayerId) {
 }
 
 function cleanupDisconnected(room) {
-  const gameRunning = room.game && !room.game.finished;
+  const now = Date.now();
+  room.spectators = room.spectators.filter((s) => {
+    if (s.connected) return true;
+    const disconnectedAt = Number(s.disconnectedAt) || 0;
+    const expired = disconnectedAt > 0 && now - disconnectedAt >= DISCONNECT_GRACE_MS;
+    if (expired) clearDisconnectTimer(room, s.id);
+    return !expired;
+  });
 
-  room.spectators = room.spectators.filter((s) => s.connected);
-
-  if (!gameRunning) {
-    room.players = room.players.filter((p) => p.connected);
-  }
+  room.players = room.players.filter((p) => {
+    if (p.connected) return true;
+    const disconnectedAt = Number(p.disconnectedAt) || 0;
+    const expired = disconnectedAt > 0 && now - disconnectedAt >= DISCONNECT_GRACE_MS;
+    if (expired) clearDisconnectTimer(room, p.id);
+    return !expired;
+  });
 
   reassignHost(room);
 
   if (room.players.length === 0 && room.spectators.length === 0) {
+    if (room.disconnectTimers) {
+      for (const timer of room.disconnectTimers.values()) clearTimeout(timer);
+      room.disconnectTimers.clear();
+    }
     clearActionTimer(room);
     clearAutoStartTimer(room);
     rooms.delete(room.id);
@@ -784,6 +927,7 @@ function settleUncontested(room) {
   room.players.forEach((p) => {
     if (p.inHand) resetHandFlags(p);
   });
+  room.players = room.players.filter((p) => !p.removeAfterHand);
 
   cleanupDisconnected(room);
   scheduleAutoNextHand(room);
@@ -929,6 +1073,7 @@ function settleShowdown(room) {
   room.players.forEach((p) => {
     if (p.inHand) resetHandFlags(p);
   });
+  room.players = room.players.filter((p) => !p.removeAfterHand);
 
   cleanupDisconnected(room);
   scheduleAutoNextHand(room);
@@ -1225,30 +1370,45 @@ function handleTurnTimeout(roomId, handNo, turnId) {
   if (!player) return;
 
   if (room.game.awaitingStraddle) {
-    const r = applyPlayerAction(room, turnId, 'skipstraddle');
-    if (r.ok) {
-      logRoom(room, `${player.name} straddle 超时，自动跳过`);
-      appendGameEvent(room, 'timeout', `${player.name} straddle 超时，自动跳过`, {
-        playerId: player.id,
+    setTimeout(() => {
+      const latestRoom = rooms.get(roomId);
+      if (!latestRoom || !latestRoom.game || latestRoom.game.finished) return;
+      if (latestRoom.game.handNo !== handNo) return;
+      if (latestRoom.game.turnId !== turnId) return;
+      if (!latestRoom.game.awaitingStraddle) return;
+      const latestPlayer = getPlayer(latestRoom, turnId);
+      if (!latestPlayer) return;
+      const r = applyPlayerAction(latestRoom, turnId, 'skipstraddle');
+      if (!r.ok) return;
+      logRoom(latestRoom, `${latestPlayer.name} straddle 超时，自动跳过`);
+      appendGameEvent(latestRoom, 'timeout', `${latestPlayer.name} straddle 超时，自动跳过`, {
+        playerId: latestPlayer.id,
       });
-      broadcastRoom(room);
+      broadcastRoom(latestRoom);
       broadcastLobby();
-    }
+    }, TURN_TIMEOUT_ACTION_DELAY_MS);
     return;
   }
 
   const need = actionToCall(room, player);
   const action = need === 0 ? 'check' : 'fold';
-  const r = applyPlayerAction(room, turnId, action);
-  if (r.ok) {
-    logRoom(room, `${player.name} 行动超时，自动${action === 'check' ? '过牌' : '弃牌'}`);
-    appendGameEvent(room, 'timeout', `${player.name} 行动超时，自动${action === 'check' ? '过牌' : '弃牌'}`, {
-      playerId: player.id,
+  setTimeout(() => {
+    const latestRoom = rooms.get(roomId);
+    if (!latestRoom || !latestRoom.game || latestRoom.game.finished) return;
+    if (latestRoom.game.handNo !== handNo) return;
+    if (latestRoom.game.turnId !== turnId) return;
+    const latestPlayer = getPlayer(latestRoom, turnId);
+    if (!latestPlayer) return;
+    const r = applyPlayerAction(latestRoom, turnId, action);
+    if (!r.ok) return;
+    logRoom(latestRoom, `${latestPlayer.name} 行动超时，自动${action === 'check' ? '过牌' : '弃牌'}`);
+    appendGameEvent(latestRoom, 'timeout', `${latestPlayer.name} 行动超时，自动${action === 'check' ? '过牌' : '弃牌'}`, {
+      playerId: latestPlayer.id,
       action,
     });
-    broadcastRoom(room);
+    broadcastRoom(latestRoom);
     broadcastLobby();
-  }
+  }, TURN_TIMEOUT_ACTION_DELAY_MS);
 }
 
 function startHand(room, requestedBy) {
@@ -1642,10 +1802,12 @@ function sendError(socket, msg) {
 }
 
 function removePlayerFromRoom(room, playerId) {
+  clearDisconnectTimer(room, playerId);
   room.players = room.players.filter((p) => p.id !== playerId);
 }
 
 function removeSpectatorFromRoom(room, spectatorId) {
+  clearDisconnectTimer(room, spectatorId);
   room.spectators = room.spectators.filter((s) => s.id !== spectatorId);
 }
 
@@ -1683,6 +1845,8 @@ function forceRemoveMember(room, targetId, opts = {}) {
 
   if (room.game && !room.game.finished && player.inHand && !player.folded) {
     player.connected = false;
+    player.disconnectedAt = Date.now();
+    player.removeAfterHand = true;
     player.folded = true;
     setPlayerLastAction(player, ban ? '被封禁自动弃牌' : '被移出自动弃牌');
     removeFromPending(room, player.id);
@@ -1733,6 +1897,8 @@ function leaveRoom(socket, silent = false) {
 
   if (room.game && !room.game.finished && player.inHand && !player.folded) {
     player.connected = false;
+    player.disconnectedAt = Date.now();
+    player.removeAfterHand = true;
     player.folded = true;
     setPlayerLastAction(player, '离开自动弃牌');
     removeFromPending(room, player.id);
@@ -1750,7 +1916,7 @@ function leaveRoom(socket, silent = false) {
   broadcastLobby();
 }
 
-function joinAsPlayer(socket, room, name) {
+function joinAsPlayer(socket, room, name, reconnectKey = '') {
   if (getPlayer(room, socket.id) || getSpectator(room, socket.id)) {
     return { ok: false, error: '请稍后再加入该房间' };
   }
@@ -1762,6 +1928,8 @@ function joinAsPlayer(socket, room, name) {
     name,
     connected: true,
     seat,
+    reconnectKey: reconnectKey || '',
+    disconnectedAt: null,
   };
   initPlayer(player, room.settings.startingStack);
 
@@ -1773,7 +1941,7 @@ function joinAsPlayer(socket, room, name) {
   return { ok: true, role: 'player' };
 }
 
-function joinAsSpectator(socket, room, name) {
+function joinAsSpectator(socket, room, name, reconnectKey = '') {
   if (getPlayer(room, socket.id) || getSpectator(room, socket.id)) {
     return { ok: false, error: '请稍后再加入该房间' };
   }
@@ -1785,6 +1953,8 @@ function joinAsSpectator(socket, room, name) {
     id: socket.id,
     name,
     connected: true,
+    reconnectKey: reconnectKey || '',
+    disconnectedAt: null,
   };
   room.spectators.push(spectator);
 
@@ -1814,6 +1984,7 @@ io.on('connection', (socket) => {
 
     const roomName = sanitizeRoomName(payload.roomName || payload.settings?.roomName || '');
     const password = sanitizePassword(payload.password || payload.settings?.password || '');
+    const reconnectKey = sanitizeReconnectKey(payload.reconnectKey || '');
     const settings = normalizeSettings(payload.settings || payload, DEFAULT_SETTINGS);
 
     leaveRoom(socket, true);
@@ -1824,6 +1995,8 @@ io.on('connection', (socket) => {
       name,
       connected: true,
       seat: 1,
+      reconnectKey,
+      disconnectedAt: null,
     };
     initPlayer(hostPlayer, settings.startingStack);
 
@@ -1851,6 +2024,7 @@ io.on('connection', (socket) => {
       emoteRateState: new Map(),
       emoteComboState: new Map(),
       lastEmoteSeq: 0,
+      disconnectTimers: new Map(),
     };
 
     rooms.set(roomId, room);
@@ -1868,6 +2042,7 @@ io.on('connection', (socket) => {
     const roomId = String(payload.roomId || '').toUpperCase().trim();
     const name = sanitizeName(payload.name);
     const password = sanitizePassword(payload.password || '');
+    const reconnectKey = sanitizeReconnectKey(payload.reconnectKey || '');
     const spectatorMode = parseBoolean(payload.spectator, false);
 
     if (!name) {
@@ -1886,7 +2061,8 @@ io.on('connection', (socket) => {
       return;
     }
 
-    if (room.password && room.password !== password) {
+    const reconnectCandidate = reconnectKey ? findReconnectCandidate(room, reconnectKey, spectatorMode) : null;
+    if (room.password && room.password !== password && !reconnectCandidate) {
       sendError(socket, '房间密码错误');
       return;
     }
@@ -1894,10 +2070,12 @@ io.on('connection', (socket) => {
     leaveRoom(socket, true);
 
     let joined;
-    if (spectatorMode) {
-      joined = joinAsSpectator(socket, room, name);
+    if (reconnectCandidate) {
+      joined = reclaimDisconnectedMember(socket, room, name, reconnectKey, spectatorMode);
+    } else if (spectatorMode) {
+      joined = joinAsSpectator(socket, room, name, reconnectKey);
     } else {
-      joined = joinAsPlayer(socket, room, name);
+      joined = joinAsPlayer(socket, room, name, reconnectKey);
     }
 
     if (!joined.ok) {
@@ -1940,6 +2118,8 @@ io.on('connection', (socket) => {
       name: spectator.name,
       connected: true,
       seat,
+      reconnectKey: spectator.reconnectKey || '',
+      disconnectedAt: null,
     };
     initPlayer(player, room.settings.startingStack);
     room.players.push(player);
@@ -1978,7 +2158,13 @@ io.on('connection', (socket) => {
     }
 
     removePlayerFromRoom(room, socket.id);
-    room.spectators.push({ id: socket.id, name: player.name, connected: true });
+    room.spectators.push({
+      id: socket.id,
+      name: player.name,
+      connected: true,
+      reconnectKey: player.reconnectKey || '',
+      disconnectedAt: null,
+    });
     socket.data.role = 'spectator';
     reassignHost(room);
 
@@ -2438,8 +2624,9 @@ io.on('connection', (socket) => {
 
     if (spectator) {
       spectator.connected = false;
-      removeSpectatorFromRoom(room, spectator.id);
-      logRoom(room, `${spectator.name} 已离线（观战）`);
+      spectator.disconnectedAt = Date.now();
+      scheduleDisconnectCleanup(room, spectator.id, 'spectator');
+      logRoom(room, `${spectator.name} 已离线（观战，保留 ${Math.floor(DISCONNECT_GRACE_MS / 60000)} 分钟）`);
       cleanupDisconnected(room);
       if (rooms.has(room.id)) {
         broadcastRoom(room);
@@ -2455,13 +2642,15 @@ io.on('connection', (socket) => {
     }
 
     player.connected = false;
+    player.disconnectedAt = Date.now();
+    scheduleDisconnectCleanup(room, player.id, 'player');
 
     if (room.game && !room.game.finished && player.inHand && !player.folded) {
       player.folded = true;
       setPlayerLastAction(player, '掉线自动弃牌');
       removeFromPending(room, player.id);
       completeActionAndAdvance(room, player.id);
-      logRoom(room, `${player.name} 掉线，自动弃牌`);
+      logRoom(room, `${player.name} 掉线，自动弃牌（座位保留 ${Math.floor(DISCONNECT_GRACE_MS / 60000)} 分钟）`);
       if (rooms.has(room.id)) {
         broadcastRoom(room);
       }
@@ -2469,8 +2658,7 @@ io.on('connection', (socket) => {
       return;
     }
 
-    removePlayerFromRoom(room, player.id);
-    logRoom(room, `${player.name} 已离线`);
+    logRoom(room, `${player.name} 已离线（座位保留 ${Math.floor(DISCONNECT_GRACE_MS / 60000)} 分钟）`);
 
     cleanupDisconnected(room);
     if (rooms.has(room.id)) {

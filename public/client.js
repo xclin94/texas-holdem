@@ -57,6 +57,7 @@ let cappuccinoCleanupTimer = null;
 let trackedCappuccinoHandNo = null;
 let trackedSeatedPlayerIds = new Set();
 let seatJoinCueKnown = false;
+let trackedFoldVisualByPlayerId = new Map();
 let socialUnreadCount = 0;
 let socialSeenChatCount = 0;
 let socialCounterState = null;
@@ -64,6 +65,23 @@ let socialCounterTimer = null;
 let seatInteractTargetId = '';
 let rebuyPromptToken = '';
 let resultVisualLock = null;
+let reconnectContext = null;
+let reconnectingToRoom = false;
+let justDisconnectedFromRoom = false;
+let roomPasswordCache = '';
+
+function ensureReconnectKey() {
+  const keyName = 'holdem_reconnect_key';
+  let key = localStorage.getItem(keyName) || '';
+  if (!/^[a-zA-Z0-9_-]{16,80}$/.test(key)) {
+    const seed = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}-${Math.random().toString(36).slice(2, 14)}`;
+    key = seed.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
+    localStorage.setItem(keyName, key);
+  }
+  return key;
+}
+
+const clientReconnectKey = ensureReconnectKey();
 
 const REQUEST_TIMEOUT_MS = 7000;
 const ACTION_PENDING_MS = 1200;
@@ -789,6 +807,7 @@ function playActionCue(kind) {
 function resetActionCueTracking() {
   trackedLastActionByPlayerId = new Map();
   localActionCueEchoes = [];
+  trackedFoldVisualByPlayerId = new Map();
 }
 
 function normalizeActionText(v) {
@@ -840,6 +859,7 @@ function trackPlayerActionCues(nextState) {
   const players = nextState?.players || [];
   if (!players.length) {
     trackedLastActionByPlayerId.clear();
+    trackedFoldVisualByPlayerId.clear();
     return;
   }
 
@@ -868,10 +888,20 @@ function trackPlayerActionCues(nextState) {
       if (kind) changed.push({ playerId: p.id, kind });
     }
     trackedLastActionByPlayerId.set(p.id, { text: currentText, seq: currentSeq });
+
+    const foldVisual = trackedFoldVisualByPlayerId.get(p.id) || { folded: false, seq: 0 };
+    const nowFolded = Boolean(p.folded && p.inHand && !nextState?.game?.finished);
+    if (nowFolded && (!foldVisual.folded || currentSeq > (Number(foldVisual.seq) || 0))) {
+      spawnFoldDiscardEffect(p.id);
+    }
+    trackedFoldVisualByPlayerId.set(p.id, { folded: nowFolded, seq: currentSeq });
   });
 
   for (const id of [...trackedLastActionByPlayerId.keys()]) {
     if (!activeIds.has(id)) trackedLastActionByPlayerId.delete(id);
+  }
+  for (const id of [...trackedFoldVisualByPlayerId.keys()]) {
+    if (!activeIds.has(id)) trackedFoldVisualByPlayerId.delete(id);
   }
 
   if (!changed.length || el.tableView.classList.contains('hidden')) return;
@@ -884,6 +914,38 @@ function trackPlayerActionCues(nextState) {
       playActionCue(item.kind);
     }, Math.min(220, idx * 90));
   });
+}
+
+function spawnFoldDiscardEffect(playerId) {
+  if (!el.emoteLayer || !el.tableCanvas) return;
+  if (uiMotionMode === 'reduced') return;
+  const from = memberPointOnTable(playerId);
+  if (!from) return;
+  const boardRect = el.communityCards?.getBoundingClientRect();
+  const tableRect = el.tableCanvas.getBoundingClientRect();
+  const centerX = boardRect
+    ? boardRect.left + boardRect.width / 2 - tableRect.left
+    : tableRect.width * 0.5;
+  const centerY = boardRect
+    ? boardRect.top + boardRect.height / 2 - tableRect.top
+    : tableRect.height * 0.5;
+
+  for (let i = 0; i < 2; i += 1) {
+    const card = document.createElement('div');
+    card.className = 'fold-throw-card';
+    const jitterX = (Math.random() - 0.5) * 24;
+    const jitterY = (Math.random() - 0.5) * 14;
+    const endX = centerX + (i === 0 ? -14 : 14) + (Math.random() - 0.5) * 10;
+    const endY = centerY + (i === 0 ? -6 : 6) + (Math.random() - 0.5) * 8;
+    card.style.setProperty('--fx', `${from.x + jitterX}px`);
+    card.style.setProperty('--fy', `${from.y + jitterY}px`);
+    card.style.setProperty('--tx', `${endX}px`);
+    card.style.setProperty('--ty', `${endY}px`);
+    card.style.setProperty('--rot', `${-22 + Math.random() * 44}deg`);
+    card.style.animationDelay = `${i * 70}ms`;
+    el.emoteLayer.appendChild(card);
+    setTimeout(() => card.remove(), 980);
+  }
 }
 
 function resetSeatJoinCueTracking() {
@@ -1994,7 +2056,8 @@ function renderSeatMap() {
 
     const cards = document.createElement('div');
     cards.className = 'seat-cards';
-    const showCompactCards = !compact || p.id === meId || roomState.game?.finished;
+    const canShowCardsNow = roomState.game?.finished || !p.folded;
+    const showCompactCards = canShowCardsNow && (!compact || p.id === meId || roomState.game?.finished);
     if (p.holeCards?.length && showCompactCards) {
       p.holeCards.forEach((c, idx) => {
         const card = cardNode(c, false, shouldAnimateSeatDeal ? 'deal-seat' : '');
@@ -2003,7 +2066,7 @@ function renderSeatMap() {
         }
         cards.appendChild(card);
       });
-    } else if (!compact && p.inHand && !roomState.game?.finished) {
+    } else if (!compact && p.inHand && !p.folded && !roomState.game?.finished) {
       cards.appendChild(cardNode('XX', true));
       cards.appendChild(cardNode('XX', true));
     }
@@ -2396,11 +2459,11 @@ function renderResult() {
     .map((p, idx) => `边池${idx + 1}: ${p.amount} -> ${(p.winners || []).map((id) => roomMemberName(id)).join('/')} ${p.handName ? `(${p.handName})` : ''}`)
     .join('<br/>');
   const autoStartSec = roomState?.autoStartAt ? Math.max(0, Math.ceil((roomState.autoStartAt - nowByServer()) / 1000)) : 0;
-  const autoStartDelayMs = Math.max(800, Number(roomState?.autoStartDelayMs || 2000));
+  const autoStartDelayMs = Math.max(800, Number(roomState?.autoStartDelayMs || 3000));
   const autoStartRemainMs = roomState?.autoStartAt ? Math.max(0, roomState.autoStartAt - nowByServer()) : 0;
   const autoStartPct = Math.max(0, Math.min(100, Math.round((autoStartRemainMs / autoStartDelayMs) * 100)));
   const cta = autoStartSec > 0
-    ? `<div class="auto-next"><p class="hint">下一手将在 ${autoStartSec}s 后自动开始</p><div class="auto-next-bar"><i style="width:${autoStartPct}%"></i></div></div>`
+    ? `<div class="auto-next"><p class="hint">自动开局中</p><div class="auto-next-bar"><i style="width:${autoStartPct}%"></i></div></div>`
     : roomState?.canStart
       ? '<p class="hint">正在等待自动开局...</p>'
       : '<p class="hint">等待玩家入座（达到 2 人将自动开局）</p>';
@@ -2740,8 +2803,8 @@ function renderStatus() {
   }
 
   const autoStartSec = roomState?.autoStartAt ? Math.max(0, Math.ceil((roomState.autoStartAt - nowByServer()) / 1000)) : 0;
-  if (g?.finished && autoStartSec > 0) {
-    el.phaseText.textContent = `本手结束 · ${autoStartSec}s后自动下一手`;
+  if (g?.finished) {
+    el.phaseText.textContent = '结算中';
   } else {
     el.phaseText.textContent = g ? phaseLabel(g.phase) : '等待开局';
   }
@@ -2853,14 +2916,11 @@ function renderStatus() {
     tableTip = '房间时长已到，不能再开始新手牌。';
     tipTone = 'error';
   } else if (g?.finished) {
-    if (autoStartSec > 0) {
-      tableTip = `本手结束，${autoStartSec}s 后自动开始下一手。`;
-      tipTone = 'ok';
-    } else if (roomState.canStart) {
-      tableTip = '本手结束，正在等待自动开局...';
-      tipTone = 'ok';
+    if (autoStartSec > 0 || roomState.canStart) {
+      tableTip = '';
+      tipTone = 'info';
     } else {
-      tableTip = '本手结束，等待玩家入座（达到 2 人将自动开局）';
+      tableTip = '等待玩家入座（达到 2 人将自动开局）';
       tipTone = 'info';
     }
   }
@@ -3359,7 +3419,8 @@ function emitJoinRequest({ roomId, name, password, spectator }) {
     return;
   }
   startJoinPending(roomId);
-  socket.emit('joinRoom', { roomId, name, password, spectator });
+  roomPasswordCache = String(password || '');
+  socket.emit('joinRoom', { roomId, name, password, spectator, reconnectKey: clientReconnectKey });
 }
 
 function quickJoin(roomId, spectator, hasPassword) {
@@ -3404,6 +3465,19 @@ socket.on('lobbyRooms', (payload) => {
 
 socket.on('connect', () => {
   clearAllPending();
+  if (justDisconnectedFromRoom && reconnectContext?.roomId) {
+    reconnectingToRoom = true;
+    const name = ensureNickname() || reconnectContext.name || myDisplayName() || '玩家';
+    socket.emit('joinRoom', {
+      roomId: reconnectContext.roomId,
+      name,
+      password: reconnectContext.password || '',
+      spectator: Boolean(reconnectContext.spectator),
+      reconnectKey: clientReconnectKey,
+    });
+    showNotice(el.tableNotice, '网络已恢复，正在自动回到房间...', 'ok');
+    return;
+  }
   socket.emit('listRooms');
   if (el.lobbyView.classList.contains('hidden')) {
     showNotice(el.tableNotice, '');
@@ -3426,6 +3500,15 @@ socket.on('disconnect', () => {
   rebuyPromptToken = '';
   closeRebuyModal();
   resetSocialState();
+  justDisconnectedFromRoom = Boolean(!el.tableView.classList.contains('hidden') && roomState?.roomId);
+  if (justDisconnectedFromRoom) {
+    reconnectContext = {
+      roomId: roomState.roomId,
+      spectator: roomState.myRole === 'spectator',
+      name: myDisplayName() || ensureNickname() || '',
+      password: roomPasswordCache || '',
+    };
+  }
   if (el.lobbyView.classList.contains('hidden')) {
     showNotice(el.tableNotice, '连接已断开，正在尝试重连...', 'error');
   } else {
@@ -3454,7 +3537,7 @@ socket.on('connect_error', () => {
   }
 });
 
-socket.on('joinedRoom', ({ playerId }) => {
+socket.on('joinedRoom', ({ playerId, roomId, role }) => {
   clearAllPending();
   setActionPending(false);
   resetActionCueTracking();
@@ -3476,6 +3559,14 @@ socket.on('joinedRoom', ({ playerId }) => {
   rebuyPromptToken = '';
   closeRebuyModal();
   resetSocialState();
+  reconnectingToRoom = false;
+  justDisconnectedFromRoom = false;
+  reconnectContext = {
+    roomId: roomId || reconnectContext?.roomId || '',
+    spectator: role === 'spectator',
+    name: ensureNickname() || myDisplayName() || '',
+    password: roomPasswordCache || '',
+  };
   meId = playerId;
   replayState = null;
   closeLobbyPanels();
@@ -3539,6 +3630,9 @@ socket.on('kicked', (payload) => {
   rebuyPromptToken = '';
   closeRebuyModal();
   resetSocialState();
+  reconnectingToRoom = false;
+  justDisconnectedFromRoom = false;
+  reconnectContext = null;
   showNotice(el.notice, payload?.reason || '你已被移出房间', 'error');
   roomState = null;
   replayState = null;
@@ -3549,6 +3643,17 @@ socket.on('kicked', (payload) => {
 });
 
 socket.on('errorMessage', (msg) => {
+  if (reconnectingToRoom) {
+    reconnectingToRoom = false;
+    justDisconnectedFromRoom = false;
+    reconnectContext = null;
+    roomState = null;
+    replayState = null;
+    el.tableView.classList.add('hidden');
+    el.lobbyView.classList.remove('hidden');
+    applySideLayout();
+    socket.emit('listRooms');
+  }
   clearAllPending();
   setActionPending(false);
   showNotice(el.tableView.classList.contains('hidden') ? el.notice : el.tableNotice, msg, 'error');
@@ -3586,7 +3691,8 @@ el.createBtn.addEventListener('click', () => {
   if (!payload.roomName) payload.roomName = '好友局';
   persistName();
   startCreatePending();
-  socket.emit('createRoom', { name, ...payload });
+  roomPasswordCache = payload.password || '';
+  socket.emit('createRoom', { name, ...payload, reconnectKey: clientReconnectKey });
 });
 
 el.joinBtn.addEventListener('click', () => {
@@ -3761,6 +3867,9 @@ el.leaveBtn.addEventListener('click', () => {
   rebuyPromptToken = '';
   closeRebuyModal();
   resetSocialState();
+  reconnectingToRoom = false;
+  justDisconnectedFromRoom = false;
+  reconnectContext = null;
   socket.emit('leaveRoom');
   roomState = null;
   replayState = null;

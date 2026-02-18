@@ -123,7 +123,7 @@ function closeSocket(socket) {
   }
 }
 
-async function createRoomAs(socket, name, overrides = {}) {
+async function createRoomAs(socket, name, overrides = {}, opts = {}) {
   const joined = waitForEvent(socket, 'joinedRoom', (payload) => Boolean(payload?.roomId));
   const roomStateReady = waitForEvent(
     socket,
@@ -131,16 +131,18 @@ async function createRoomAs(socket, name, overrides = {}) {
     (state) => Boolean(state?.roomId) && (state.players || []).some((p) => p.id === socket.id),
     EVENT_TIMEOUT_MS,
   );
+  const reconnectKey = String(opts.reconnectKey || '');
   socket.emit('createRoom', {
     name,
     roomName: `rules-${Date.now().toString(36)}`,
     ...overrides,
+    reconnectKey,
   });
   const [joinedPayload, state] = await Promise.all([joined, roomStateReady]);
   return joinedPayload.roomId || state.roomId;
 }
 
-async function joinRoomAs(socket, roomId, name) {
+async function joinRoomAs(socket, roomId, name, opts = {}) {
   const joined = waitForEvent(socket, 'joinedRoom', (payload) => payload?.roomId === roomId);
   const roomStateReady = waitForEvent(
     socket,
@@ -148,7 +150,13 @@ async function joinRoomAs(socket, roomId, name) {
     (state) => state?.roomId === roomId && (state.players || []).some((p) => p.id === socket.id),
     EVENT_TIMEOUT_MS,
   );
-  socket.emit('joinRoom', { roomId, name, spectator: false });
+  socket.emit('joinRoom', {
+    roomId,
+    name,
+    spectator: Boolean(opts.spectator),
+    password: String(opts.password || ''),
+    reconnectKey: String(opts.reconnectKey || ''),
+  });
   await Promise.all([joined, roomStateReady]);
 }
 
@@ -284,7 +292,7 @@ test('all-in showdown reveals cards in serialized players', async (t) => {
   assert.equal(Array.isArray(guestPlayer?.holeCards) && guestPlayer.holeCards.length === 2, true);
 });
 
-test('auto next hand countdown waits for result animations then starts automatically', async (t) => {
+test('auto next hand countdown uses 3 seconds and starts automatically', async (t) => {
   const { sockets } = await setupPlayers(t, 3, { allowStraddle: false });
   const [host] = sockets;
   const byId = socketById(sockets);
@@ -314,15 +322,15 @@ test('auto next hand countdown waits for result animations then starts automatic
     (next) => next?.game?.handNo === handNo && next.game.finished && Boolean(next.autoStartAt),
   );
 
-  assert.equal(state.autoStartDelayMs, 5500);
+  assert.equal(state.autoStartDelayMs, 3000);
   const deltaMs = Number(state.autoStartAt) - Number(state.serverNow);
-  assert.equal(deltaMs > 4500 && deltaMs <= 5900, true);
+  assert.equal(deltaMs > 2200 && deltaMs <= 3400, true);
 
   const nextHand = await waitForEvent(
     host,
     'roomState',
     (next) => next?.game && !next.game.finished && next.game.handNo === handNo + 1,
-    EVENT_TIMEOUT_MS + 7000,
+    EVENT_TIMEOUT_MS + 5000,
   );
   assert.equal(nextHand.game.handNo, handNo + 1);
 });
@@ -382,4 +390,63 @@ test('finished table keeps auto countdown with one player and restarts immediate
   await joinRoomAs(newcomer, roomId, `Late-${Date.now().toString(36).slice(-4)}`);
   const nextHand = await nextHandPromise;
   assert.equal(nextHand.game.handNo, handNo + 1);
+});
+
+test('disconnected player keeps seat and can recover by reconnect key', async (t) => {
+  const host = await connectClient();
+  const guest = await connectClient();
+  t.after(() => {
+    closeSocket(host);
+    closeSocket(guest);
+  });
+
+  const hostName = `Host-${Date.now().toString(36).slice(-4)}`;
+  const guestName = `Guest-${Date.now().toString(36).slice(-4)}`;
+  const hostKey = `rk-${Date.now().toString(36)}-host`;
+  const guestKey = `rk-${Date.now().toString(36)}-guest`;
+
+  const roomId = await createRoomAs(host, hostName, { allowStraddle: false }, { reconnectKey: hostKey });
+  await joinRoomAs(guest, roomId, guestName, { reconnectKey: guestKey });
+
+  let state = await waitForEvent(
+    host,
+    'roomState',
+    (next) => next?.roomId === roomId && next.players?.length === 2 && next.players.some((p) => p.name === guestName),
+  );
+  const guestBefore = (state.players || []).find((p) => p.name === guestName);
+  assert.ok(guestBefore);
+  const guestSeat = guestBefore.seat;
+  const guestOldId = guestBefore.id;
+
+  closeSocket(guest);
+  state = await waitForEvent(
+    host,
+    'roomState',
+    (next) => {
+      if (next?.roomId !== roomId) return false;
+      const target = (next.players || []).find((p) => p.seat === guestSeat);
+      return Boolean(target && target.connected === false);
+    },
+    EVENT_TIMEOUT_MS + 3000,
+  );
+  const stillSeated = (state.players || []).find((p) => p.seat === guestSeat);
+  assert.equal(stillSeated?.connected, false);
+
+  const recovered = await connectClient();
+  t.after(() => closeSocket(recovered));
+  const recoveredStatePromise = waitForEvent(
+    host,
+    'roomState',
+    (next) => {
+      if (next?.roomId !== roomId) return false;
+      const target = (next.players || []).find((p) => p.seat === guestSeat);
+      return Boolean(target && target.connected === true && target.id !== guestOldId);
+    },
+    EVENT_TIMEOUT_MS + 4000,
+  );
+  await joinRoomAs(recovered, roomId, guestName, { reconnectKey: guestKey });
+  const recoveredState = await recoveredStatePromise;
+  const guestAfter = (recoveredState.players || []).find((p) => p.seat === guestSeat);
+  assert.equal(guestAfter?.connected, true);
+  assert.equal(guestAfter?.name, guestName);
 });
