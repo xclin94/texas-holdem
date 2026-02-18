@@ -47,11 +47,14 @@ let trackedLastActionByPlayerId = new Map();
 let localActionCueEchoes = [];
 let pendingPotPushAnimation = null;
 let potPushCleanupTimer = null;
+let trackedSeatedPlayerIds = new Set();
+let seatJoinCueKnown = false;
 
 const REQUEST_TIMEOUT_MS = 7000;
 const ACTION_PENDING_MS = 1200;
 const LOCAL_CUE_ECHO_MS = 1400;
 const COMMUNITY_REVEAL_GAP_MS = 500;
+const LOBBY_REFRESH_INTERVAL_MS = 1000;
 
 const $ = (id) => document.getElementById(id);
 
@@ -217,7 +220,8 @@ const ACTION_VOICE_SRC = {
   bet: '/audio/bet-zh.mp3',
   raise: '/audio/raise-zh.mp3',
   fold: '/audio/fold-zh.mp3',
-  allin: '/audio/allin-zh.mp3',
+  allin: '/audio/allin-en.mp3',
+  seatjoin: '/audio/seatjoin-zh.mp3',
   straddle: '/audio/straddle-zh.mp3',
   skipstraddle: '/audio/skipstraddle-zh.mp3',
 };
@@ -645,6 +649,13 @@ function playToneCue(kind) {
         ],
         vibrate: [42, 26, 56],
       },
+      seatjoin: {
+        tones: [
+          { type: 'triangle', from: 620, to: 760, dur: 0.09, gain: 0.12, delay: 0 },
+          { type: 'triangle', from: 760, to: 920, dur: 0.1, gain: 0.14, delay: 0.05 },
+        ],
+        vibrate: [18, 18, 20],
+      },
       straddle: {
         tones: [
           { type: 'square', from: 780, to: 1120, dur: 0.12, gain: 0.16, delay: 0 },
@@ -774,6 +785,32 @@ function trackPlayerActionCues(nextState) {
       if (el.tableView.classList.contains('hidden')) return;
       if (item.playerId === meId && shouldSkipLocalEcho(item.kind)) return;
       playActionCue(item.kind);
+    }, Math.min(220, idx * 90));
+  });
+}
+
+function resetSeatJoinCueTracking() {
+  trackedSeatedPlayerIds = new Set();
+  seatJoinCueKnown = false;
+}
+
+function trackSeatJoinCue(nextState) {
+  const players = nextState?.players || [];
+  const current = new Set(players.map((p) => p.id));
+  if (!seatJoinCueKnown) {
+    trackedSeatedPlayerIds = current;
+    seatJoinCueKnown = true;
+    return;
+  }
+
+  const newcomers = players.filter((p) => !trackedSeatedPlayerIds.has(p.id));
+  trackedSeatedPlayerIds = current;
+  if (!newcomers.length || el.tableView.classList.contains('hidden')) return;
+
+  newcomers.forEach((_, idx) => {
+    setTimeout(() => {
+      if (!uiSoundEnabled || el.tableView.classList.contains('hidden')) return;
+      playActionCue('seatjoin');
     }, Math.min(220, idx * 90));
   });
 }
@@ -1039,6 +1076,116 @@ function suitSymbol(s) {
   return { S: '♠', H: '♥', D: '♦', C: '♣' }[s] || s;
 }
 
+function evalRankValue(card) {
+  const r = card?.[0];
+  if (r >= '2' && r <= '9') return Number(r);
+  if (r === 'T') return 10;
+  if (r === 'J') return 11;
+  if (r === 'Q') return 12;
+  if (r === 'K') return 13;
+  if (r === 'A') return 14;
+  return 0;
+}
+
+function evalSuitValue(card) {
+  return card?.[1] || '';
+}
+
+function evalFindStraightHigh(ranks) {
+  const set = new Set(ranks);
+  if (set.has(14)) set.add(1);
+  for (let high = 14; high >= 5; high -= 1) {
+    let ok = true;
+    for (let i = 0; i < 5; i += 1) {
+      if (!set.has(high - i)) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) return high;
+  }
+  return 0;
+}
+
+function evaluateLiveHand(cards) {
+  const valid = (cards || []).filter((c) => /^[2-9TJQKA][SHDC]$/.test(c));
+  if (valid.length < 2) return { name: '-' };
+
+  const ranks = valid.map(evalRankValue).filter((n) => n > 0);
+  const suits = valid.map(evalSuitValue).filter(Boolean);
+  const rankCounts = new Map();
+  const suitMap = new Map();
+
+  for (let i = 0; i < valid.length; i += 1) {
+    const r = ranks[i];
+    const s = suits[i];
+    rankCounts.set(r, (rankCounts.get(r) || 0) + 1);
+    if (!suitMap.has(s)) suitMap.set(s, []);
+    suitMap.get(s).push(r);
+  }
+
+  const uniqueRanksDesc = [...new Set(ranks)].sort((a, b) => b - a);
+  const groups = [...rankCounts.entries()]
+    .map(([rank, count]) => ({ rank, count }))
+    .sort((a, b) => b.count - a.count || b.rank - a.rank);
+
+  let flushSuit = null;
+  let flushRanksDesc = [];
+  for (const [suit, suitRanks] of suitMap.entries()) {
+    if (suitRanks.length >= 5) {
+      const sorted = [...new Set(suitRanks)].sort((a, b) => b - a);
+      if (!flushSuit || sorted[0] > flushRanksDesc[0]) {
+        flushSuit = suit;
+        flushRanksDesc = sorted;
+      }
+    }
+  }
+
+  if (flushSuit) {
+    const sfHigh = evalFindStraightHigh(flushRanksDesc);
+    if (sfHigh > 0) return { name: sfHigh === 14 ? '皇家同花顺' : '同花顺' };
+  }
+
+  const four = groups.find((g) => g.count === 4);
+  if (four) return { name: '四条' };
+
+  const trips = groups.filter((g) => g.count === 3).map((g) => g.rank).sort((a, b) => b - a);
+  const pairs = groups.filter((g) => g.count >= 2).map((g) => g.rank).sort((a, b) => b - a);
+  if (trips.length >= 1) {
+    let pairRank = pairs.find((r) => r !== trips[0]);
+    if (!pairRank && trips.length >= 2) pairRank = trips[1];
+    if (pairRank) return { name: '葫芦' };
+  }
+
+  if (flushSuit) return { name: '同花' };
+
+  const straightHigh = evalFindStraightHigh(uniqueRanksDesc);
+  if (straightHigh > 0) return { name: '顺子' };
+
+  if (trips.length >= 1) return { name: '三条' };
+
+  if (pairs.length >= 2) return { name: '两对' };
+
+  if (pairs.length >= 1) return { name: '一对' };
+
+  return { name: '高牌' };
+}
+
+function computeLiveMyHandName() {
+  if (!roomState?.game) return '-';
+  const me = roomPlayerById(meId);
+  const holeCards = Array.isArray(me?.holeCards) ? me.holeCards.filter(Boolean) : [];
+  if (holeCards.length < 2) return roomState?.myHandName || '-';
+  const board = communityRevealKnown ? communityVisibleCards : roomState.game.community || [];
+  const ev = evaluateLiveHand([...holeCards, ...board]);
+  return ev?.name || roomState?.myHandName || '-';
+}
+
+function refreshLiveHandTypeText() {
+  if (!el.handTypeText) return;
+  el.handTypeText.textContent = computeLiveMyHandName();
+}
+
 function rankDisplay(rank) {
   return rank === 'T' ? '10' : rank;
 }
@@ -1235,6 +1382,7 @@ function drawCommunityBoard(animateFrom = -1) {
   for (let i = communityVisibleCards.length; i < 5; i += 1) {
     el.communityCards.appendChild(cardNode('XX', true));
   }
+  refreshLiveHandTypeText();
 }
 
 function scheduleCommunityReveal() {
@@ -1351,8 +1499,6 @@ function useSideDrawerMode() {
 function compactStackText(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return '-';
-  if (n >= 1000000) return `${(n / 1000000).toFixed(n >= 10000000 ? 0 : 1)}m`;
-  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
   return String(Math.max(0, Math.floor(n)));
 }
 
@@ -2244,11 +2390,13 @@ function renderStatus() {
     trackedSeatDealHandNo = null;
     trackedTurnCueToken = null;
     pendingPotPushAnimation = null;
+    resetCommunityRevealState(null);
     raiseUiExpanded = false;
     clearPreAction(true);
   } else {
     if (trackedHandNo !== g.handNo) {
       trackedHandNo = g.handNo;
+      resetCommunityRevealState(g.handNo);
       trackedPhase = g.phase;
       trackedTurnCueToken = null;
       raiseUiExpanded = false;
@@ -2277,7 +2425,7 @@ function renderStatus() {
   } else {
     el.phaseText.textContent = g ? phaseLabel(g.phase) : '等待开局';
   }
-  el.handTypeText.textContent = roomState?.myHandName || '-';
+  refreshLiveHandTypeText();
   const potTotal = g?.potTotal || 0;
   const currentBet = g?.currentBet || 0;
   const streetBetTotal = (roomState?.players || []).reduce((sum, p) => sum + Math.max(0, Number(p.betThisStreet) || 0), 0);
@@ -2552,6 +2700,7 @@ socket.on('disconnect', () => {
   clearAllPending();
   setActionPending(false);
   resetActionCueTracking();
+  resetSeatJoinCueTracking();
   resetCommunityRevealState(null);
   clearPotPushAnimationLayer();
   pendingPotPushAnimation = null;
@@ -2566,6 +2715,7 @@ socket.on('connect_error', () => {
   clearAllPending();
   setActionPending(false);
   resetActionCueTracking();
+  resetSeatJoinCueTracking();
   resetCommunityRevealState(null);
   clearPotPushAnimationLayer();
   pendingPotPushAnimation = null;
@@ -2580,6 +2730,7 @@ socket.on('joinedRoom', ({ playerId }) => {
   clearAllPending();
   setActionPending(false);
   resetActionCueTracking();
+  resetSeatJoinCueTracking();
   clearPotPushAnimationLayer();
   pendingPotPushAnimation = null;
   raiseUiExpanded = false;
@@ -2604,6 +2755,7 @@ socket.on('joinedRoom', ({ playerId }) => {
 socket.on('roomState', (state) => {
   setActionPending(false);
   trackPlayerActionCues(state);
+  trackSeatJoinCue(state);
   roomState = state;
   syncServerClock(state?.serverNow);
   renderRoom();
@@ -2625,6 +2777,7 @@ socket.on('kicked', (payload) => {
   clearAllPending();
   setActionPending(false);
   resetActionCueTracking();
+  resetSeatJoinCueTracking();
   clearPotPushAnimationLayer();
   pendingPotPushAnimation = null;
   raiseUiExpanded = false;
@@ -2809,6 +2962,7 @@ el.leaveBtn.addEventListener('click', () => {
   clearAllPending();
   setActionPending(false);
   resetActionCueTracking();
+  resetSeatJoinCueTracking();
   clearPotPushAnimationLayer();
   pendingPotPushAnimation = null;
   raiseUiExpanded = false;
@@ -2976,7 +3130,7 @@ setInterval(() => {
   if (el.lobbyView.classList.contains('hidden')) {
     if (roomState) renderStatus();
   } else {
-    if (Date.now() - lastLobbyFetchAt > 3000 && socket.connected) {
+    if (Date.now() - lastLobbyFetchAt > LOBBY_REFRESH_INTERVAL_MS && socket.connected) {
       socket.emit('listRooms');
       lastLobbyFetchAt = Date.now();
     }

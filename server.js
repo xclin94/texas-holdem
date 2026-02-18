@@ -1305,18 +1305,26 @@ function roomSummary(room) {
   };
 }
 
-function broadcastLobby() {
-  const data = [...rooms.values()]
+function buildLobbyPayload() {
+  const roomsData = [...rooms.values()]
     .map((room) => roomSummary(room))
     .sort((a, b) => {
       if (a.inGame !== b.inGame) return a.inGame ? 1 : -1;
       return a.roomId.localeCompare(b.roomId);
     });
 
-  io.emit('lobbyRooms', {
-    rooms: data,
+  return {
+    rooms: roomsData,
     serverNow: Date.now(),
-  });
+  };
+}
+
+function sendLobbyToSocket(socket) {
+  socket.emit('lobbyRooms', buildLobbyPayload());
+}
+
+function broadcastLobby() {
+  io.emit('lobbyRooms', buildLobbyPayload());
 }
 
 function buildActionState(room, viewer) {
@@ -1663,16 +1671,10 @@ io.on('connection', (socket) => {
   socket.data.roomId = null;
   socket.data.role = null;
 
-  socket.emit('lobbyRooms', {
-    rooms: [...rooms.values()].map((room) => roomSummary(room)),
-    serverNow: Date.now(),
-  });
+  sendLobbyToSocket(socket);
 
   socket.on('listRooms', () => {
-    socket.emit('lobbyRooms', {
-      rooms: [...rooms.values()].map((room) => roomSummary(room)),
-      serverNow: Date.now(),
-    });
+    sendLobbyToSocket(socket);
   });
 
   socket.on('createRoom', (payload = {}) => {
