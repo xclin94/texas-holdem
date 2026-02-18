@@ -61,6 +61,8 @@ let socialUnreadCount = 0;
 let socialSeenChatCount = 0;
 let socialCounterState = null;
 let socialCounterTimer = null;
+let socialTargetId = '';
+let rebuyPromptToken = '';
 
 const REQUEST_TIMEOUT_MS = 7000;
 const ACTION_PENDING_MS = 1200;
@@ -208,19 +210,25 @@ const el = {
   chatInput: $('chatInput'),
   sendChatBtn: $('sendChatBtn'),
   emoteLayer: $('emoteLayer'),
+  socialLauncherBtn: $('socialLauncherBtn'),
+  socialLauncherBadge: $('socialLauncherBadge'),
   socialDock: $('socialDock'),
   socialBody: $('socialBody'),
   socialCollapseBtn: $('socialCollapseBtn'),
   socialSoundBtn: $('socialSoundBtn'),
   socialAnimBtn: $('socialAnimBtn'),
-  emoteTargetSelect: $('emoteTargetSelect'),
+  socialTargetHint: $('socialTargetHint'),
+  clearSocialTargetBtn: $('clearSocialTargetBtn'),
   counterRow: $('counterRow'),
   counterText: $('counterText'),
   counterBtn: $('counterBtn'),
-  socialUnreadBadge: $('socialUnreadBadge'),
   socialChatFeed: $('socialChatFeed'),
   socialChatInput: $('socialChatInput'),
   socialChatSendBtn: $('socialChatSendBtn'),
+  rebuyModal: $('rebuyModal'),
+  rebuyModalText: $('rebuyModalText'),
+  rebuyConfirmBtn: $('rebuyConfirmBtn'),
+  rebuyDeclineBtn: $('rebuyDeclineBtn'),
 };
 
 const quickRaiseButtons = Array.from(document.querySelectorAll('.quick-raise-btn'));
@@ -804,7 +812,10 @@ function trackPlayerActionCues(nextState) {
 
   if (trackedLastActionByPlayerId.size === 0) {
     players.forEach((p) => {
-      trackedLastActionByPlayerId.set(p.id, normalizeActionText(p.lastAction));
+      trackedLastActionByPlayerId.set(p.id, {
+        text: normalizeActionText(p.lastAction),
+        seq: Number(p.lastActionSeq) || 0,
+      });
     });
     return;
   }
@@ -814,13 +825,16 @@ function trackPlayerActionCues(nextState) {
 
   players.forEach((p) => {
     activeIds.add(p.id);
-    const current = normalizeActionText(p.lastAction);
-    const previous = trackedLastActionByPlayerId.get(p.id) || '';
-    if (current && current !== previous) {
-      const kind = detectActionCueKind(current);
+    const currentText = normalizeActionText(p.lastAction);
+    const currentSeq = Number(p.lastActionSeq) || 0;
+    const previous = trackedLastActionByPlayerId.get(p.id) || { text: '', seq: 0 };
+    const seqChanged = currentSeq > (Number(previous.seq) || 0);
+    const textChanged = Boolean(currentText && currentText !== previous.text);
+    if (currentText && (seqChanged || textChanged)) {
+      const kind = detectActionCueKind(currentText);
       if (kind) changed.push({ playerId: p.id, kind });
     }
-    trackedLastActionByPlayerId.set(p.id, current);
+    trackedLastActionByPlayerId.set(p.id, { text: currentText, seq: currentSeq });
   });
 
   for (const id of [...trackedLastActionByPlayerId.keys()]) {
@@ -985,6 +999,28 @@ function startCreatePending() {
 
 function roomPlayerById(id) {
   return roomState?.players?.find((p) => p.id === id) || null;
+}
+
+function closeRebuyModal() {
+  if (el.rebuyModal) el.rebuyModal.classList.add('hidden');
+}
+
+function openRebuyModal() {
+  if (!roomState || roomState.myRole !== 'player') return;
+  const me = roomPlayerById(meId);
+  if (!me) return;
+  const token = `${roomState.roomId}:${roomState?.game?.handNo || 0}:${me.rebuyCount || 0}:${me.stack}`;
+  if (me.stack > 0 || (roomState?.game && !roomState.game.finished && me.inHand)) {
+    rebuyPromptToken = '';
+    closeRebuyModal();
+    return;
+  }
+  if (rebuyPromptToken === token) return;
+  rebuyPromptToken = token;
+  if (el.rebuyModalText) {
+    el.rebuyModalText.textContent = `你当前筹码为 0，是否花费 ${roomState.settings.startingStack} 重新买入继续游戏？`;
+  }
+  if (el.rebuyModal) el.rebuyModal.classList.remove('hidden');
 }
 
 function canSelfChangeSeat() {
@@ -1153,7 +1189,7 @@ function runCappuccinoCelebration(payload) {
   node.innerHTML = `
     <div class="cappuccino-scene">
       <div class="maid-card">
-        <span class="maid-icon">🧑‍🍳</span>
+        <span class="maid-icon">💁‍♀️</span>
         <span class="maid-text">女仆上线</span>
       </div>
       <div class="cup-card">☕ 卡布奇诺</div>
@@ -1169,7 +1205,7 @@ function runCappuccinoCelebration(payload) {
       clearTimeout(cappuccinoCleanupTimer);
       cappuccinoCleanupTimer = null;
     }
-  }, 3600);
+  }, 5200);
 }
 
 function flushPendingCappuccinoCelebration() {
@@ -1629,9 +1665,17 @@ function createStackVisual(stack, base) {
   const tier = stackVisualTier(stack, base);
   const box = document.createElement('div');
   box.className = `seat-stack-visual tier-${tier}`;
-  box.innerHTML = '<i></i><i></i><i></i>';
+  const pile = document.createElement('div');
+  pile.className = 'chip-pile';
+  const chipCount = tier <= 0 ? 1 : Math.min(7, tier + 2);
+  for (let i = 0; i < chipCount; i += 1) {
+    const chip = document.createElement('i');
+    chip.style.setProperty('--chip-i', String(i));
+    pile.appendChild(chip);
+  }
+  box.appendChild(pile);
   const txt = document.createElement('span');
-  txt.textContent = tier === 0 ? '空' : `筹${tier}`;
+  txt.textContent = `${Math.max(0, Math.floor(Number(stack) || 0))}`;
   box.appendChild(txt);
   return box;
 }
@@ -1684,52 +1728,6 @@ function seatNodePreset(maxPlayers, compact) {
   return { width: 170, height: 116, compact: false, dense: false };
 }
 
-function labelsForCount(count) {
-  if (count <= 0) return [];
-  const map = {
-    1: ['UTG'],
-    2: ['UTG', 'CO'],
-    3: ['UTG', 'HJ', 'CO'],
-    4: ['UTG', 'LJ', 'HJ', 'CO'],
-    5: ['UTG', 'UTG+1', 'LJ', 'HJ', 'CO'],
-    6: ['UTG', 'UTG+1', 'MP', 'LJ', 'HJ', 'CO'],
-  };
-  return map[count] || Array.from({ length: count }, (_, i) => `P${i + 1}`);
-}
-
-function buildPositionLabelMap() {
-  const map = new Map();
-  const game = roomState?.game;
-  if (!game || !game.order?.length) return map;
-
-  const order = game.order;
-  const n = order.length;
-
-  if (n === 2) {
-    map.set(game.dealerId, 'BTN/SB');
-    map.set(game.bigBlindId, 'BB');
-    return map;
-  }
-
-  map.set(game.dealerId, 'BTN');
-  map.set(game.smallBlindId, 'SB');
-  map.set(game.bigBlindId, 'BB');
-
-  const bbIdx = order.indexOf(game.bigBlindId);
-  const seq = [];
-  let idx = bbIdx;
-  for (let i = 0; i < n; i += 1) {
-    idx = (idx + 1) % n;
-    const id = order[idx];
-    if (id === game.dealerId || id === game.smallBlindId || id === game.bigBlindId) continue;
-    seq.push(id);
-  }
-
-  const labels = labelsForCount(seq.length);
-  seq.forEach((id, i) => map.set(id, labels[i] || `P${i + 1}`));
-  return map;
-}
-
 function renderSeatMap() {
   el.seatMap.innerHTML = '';
   const players = roomState?.players || [];
@@ -1746,7 +1744,6 @@ function renderSeatMap() {
   const compact = isMobileView();
   const narrowMobile = compact && isNarrowMobileView();
   const layout = getSeatLayout(maxPlayers, compact);
-  const posMap = buildPositionLabelMap();
   const preset = seatNodePreset(maxPlayers, compact);
   const shouldAnimateSeatDeal = Boolean(handNo && handNo !== trackedSeatDealHandNo);
 
@@ -1803,10 +1800,14 @@ function renderSeatMap() {
       continue;
     }
 
+    node.dataset.playerId = p.id;
+    if (socialTargetId && socialTargetId === p.id) {
+      node.classList.add('social-targeted');
+    }
+
     const head = document.createElement('div');
     head.className = 'seat-head';
-    const pos = posMap.get(p.id) || `S${seat}`;
-    head.textContent = compact ? p.name : `${p.name} · ${pos}`;
+    head.textContent = compact ? p.name : `${p.name} · ${seat}号位`;
     if (roomState.game?.dealerId === p.id) node.classList.add('seat-dealer');
     if (roomState.game?.smallBlindId === p.id) node.classList.add('seat-sb');
     if (roomState.game?.bigBlindId === p.id) node.classList.add('seat-bb');
@@ -1821,7 +1822,6 @@ function renderSeatMap() {
     if (roomState.game?.dealerId === p.id) pushBadge(compact ? '庄' : '庄家', 'role-dealer');
     if (roomState.game?.smallBlindId === p.id) pushBadge(compact ? 'SB' : '小盲', 'role-sb');
     if (roomState.game?.bigBlindId === p.id) pushBadge(compact ? 'BB' : '大盲', 'role-bb');
-    if (compact) pushBadge(pos, 'gold');
     if (p.id === roomState.hostId) pushBadge(compact ? '房' : '房主', 'gold');
     if (roomState.game?.turnId === p.id && !roomState.game?.finished) pushBadge(compact ? '行动' : '行动中', 'ok');
     if (!compact && p.ready) pushBadge('已准备', 'ok');
@@ -1848,7 +1848,7 @@ function renderSeatMap() {
     const streetBet = Math.max(0, Number(p.betThisStreet) || 0);
     const betChip = document.createElement('div');
     betChip.className = `seat-bet-chip${streetBet > 0 ? ' active' : ''}`;
-    betChip.textContent = compact ? (streetBet > 0 ? `轮+${streetBet}` : '轮+0') : `本轮 +${streetBet}`;
+    betChip.textContent = compact ? `本轮 ${streetBet}` : `本轮下注 ${streetBet}`;
     const stackVisual = createStackVisual(p.stack, baseStack);
 
     const cards = document.createElement('div');
@@ -1879,6 +1879,16 @@ function renderSeatMap() {
 
     const admin = createAdminButtons(p.id);
     if (admin) node.appendChild(admin);
+
+    if (!seatPickMode && p.id !== meId) {
+      node.addEventListener('click', (evt) => {
+        if (evt.target instanceof Element && evt.target.closest('button')) return;
+        if (uiSocialCollapsed) return;
+        socialTargetId = socialTargetId === p.id ? '' : p.id;
+        refreshSocialTargetState();
+        renderSeatMap();
+      });
+    }
 
     el.seatMap.appendChild(node);
   }
@@ -2558,7 +2568,7 @@ function renderStatus() {
         Number((g.result?.winners || []).find((w) => w?.playerId === meId)?.amount) || 0,
       );
       const halfBuyIn = Math.max(1, Math.floor((Number(roomState?.settings?.startingStack) || 0) / 2));
-      if (myWin > halfBuyIn && trackedCappuccinoHandNo !== g.handNo) {
+      if (myWin >= halfBuyIn && trackedCappuccinoHandNo !== g.handNo) {
         trackedCappuccinoHandNo = g.handNo;
         queueCappuccinoCelebration(g.handNo, myWin);
       }
@@ -2641,6 +2651,11 @@ function renderStatus() {
   el.rebuyBtn.classList.toggle('hidden', !canRebuy);
   el.rebuyBtn.disabled = !canRebuy;
   el.rebuyBtn.textContent = `重新买入 ${roomState.settings.startingStack}`;
+  if (canRebuy) {
+    openRebuyModal();
+  } else {
+    closeRebuyModal();
+  }
 
   const sessionSec = Math.max(0, Math.ceil((roomState.sessionEndsAt - nowByServer()) / 1000));
   el.sessionTimer.textContent = `时长剩余 ${fmtClock(sessionSec)}`;
@@ -2783,11 +2798,12 @@ function clearSocialCounter() {
 function resetSocialState() {
   socialUnreadCount = 0;
   socialSeenChatCount = 0;
+  socialTargetId = '';
   clearSocialCounter();
   if (el.emoteLayer) el.emoteLayer.innerHTML = '';
-  if (el.socialUnreadBadge) {
-    el.socialUnreadBadge.classList.add('hidden');
-    el.socialUnreadBadge.textContent = '0';
+  if (el.socialLauncherBadge) {
+    el.socialLauncherBadge.classList.add('hidden');
+    el.socialLauncherBadge.textContent = '0';
   }
 }
 
@@ -2804,24 +2820,28 @@ function refreshSocialButtons() {
     el.socialAnimBtn.textContent = `动画:${uiSocialAnimEnabled ? '开' : '关'}`;
   }
   if (el.socialCollapseBtn) {
-    el.socialCollapseBtn.textContent = uiSocialCollapsed ? '展开' : '收起';
+    el.socialCollapseBtn.textContent = uiSocialCollapsed ? '打开' : '关闭';
   }
 }
 
 function refreshSocialUnreadBadge() {
-  if (!el.socialUnreadBadge) return;
+  if (!el.socialLauncherBadge) return;
   if (!socialUnreadCount || !uiSocialCollapsed) {
-    el.socialUnreadBadge.classList.add('hidden');
-    el.socialUnreadBadge.textContent = '0';
+    el.socialLauncherBadge.classList.add('hidden');
+    el.socialLauncherBadge.textContent = '0';
     return;
   }
-  el.socialUnreadBadge.classList.remove('hidden');
-  el.socialUnreadBadge.textContent = String(Math.min(99, socialUnreadCount));
+  el.socialLauncherBadge.classList.remove('hidden');
+  el.socialLauncherBadge.textContent = String(Math.min(99, socialUnreadCount));
 }
 
 function applySocialDockState(persist = false) {
   if (!el.socialDock) return;
   el.socialDock.classList.toggle('collapsed', uiSocialCollapsed);
+  el.socialDock.classList.toggle('hidden', uiSocialCollapsed);
+  if (el.socialLauncherBtn) {
+    el.socialLauncherBtn.classList.toggle('active', !uiSocialCollapsed);
+  }
   if (!uiSocialCollapsed) socialUnreadCount = 0;
   refreshSocialUnreadBadge();
   refreshSocialButtons();
@@ -2934,7 +2954,7 @@ function spawnQuickEmoteBubble(event) {
     node.appendChild(combo);
   }
   el.emoteLayer.appendChild(node);
-  setTimeout(() => node.remove(), 1700);
+  setTimeout(() => node.remove(), 5000);
 }
 
 function spawnPropEmote(event) {
@@ -2961,8 +2981,26 @@ function spawnPropEmote(event) {
   impact.style.animationDelay = '360ms';
   el.emoteLayer.appendChild(impact);
 
-  setTimeout(() => shot.remove(), 950);
-  setTimeout(() => impact.remove(), 1650);
+  setTimeout(() => shot.remove(), 1300);
+  setTimeout(() => impact.remove(), 5000);
+}
+
+function spawnSocialMessageBubble(event) {
+  if (!el.emoteLayer) return;
+  const from = memberPointOnTable(event.fromId);
+  if (!from) return;
+  const node = document.createElement('div');
+  node.className = 'social-msg-bubble';
+  node.style.setProperty('--bx', `${from.x}px`);
+  node.style.setProperty('--by', `${from.y}px`);
+  const who = document.createElement('b');
+  who.textContent = event.fromName || roomMemberName(event.fromId);
+  const msg = document.createElement('span');
+  msg.textContent = event.message || '';
+  node.appendChild(who);
+  node.appendChild(msg);
+  el.emoteLayer.appendChild(node);
+  setTimeout(() => node.remove(), 5000);
 }
 
 function handleIncomingEmote(event) {
@@ -2992,33 +3030,21 @@ function handleIncomingEmote(event) {
   }
 }
 
-function refreshEmoteTargetOptions() {
-  if (!el.emoteTargetSelect) return;
-  const prev = el.emoteTargetSelect.value;
+function refreshSocialTargetState() {
   const players = (roomState?.players || []).filter((p) => p.id !== meId);
-  el.emoteTargetSelect.innerHTML = '';
-  const empty = document.createElement('option');
-  empty.value = '';
-  empty.textContent = players.length ? '选择目标玩家' : '暂无可互动目标';
-  el.emoteTargetSelect.appendChild(empty);
-  players.forEach((p) => {
-    const op = document.createElement('option');
-    op.value = p.id;
-    op.textContent = `${p.name} · 座位${p.seat}`;
-    el.emoteTargetSelect.appendChild(op);
-  });
-  if (players.some((p) => p.id === prev)) {
-    el.emoteTargetSelect.value = prev;
+  if (!players.some((p) => p.id === socialTargetId)) {
+    socialTargetId = '';
   }
-
-  const targetable = Boolean(el.emoteTargetSelect.value);
-  propEmoteButtons.forEach((btn) => {
-    btn.disabled = !targetable;
-  });
-}
-
-function syncPropEmoteButtons() {
-  const targetable = Boolean(el.emoteTargetSelect?.value);
+  const target = players.find((p) => p.id === socialTargetId) || null;
+  if (el.socialTargetHint) {
+    el.socialTargetHint.textContent = target
+      ? `互动目标：${target.name}（座位${target.seat}）`
+      : '点击牌桌上的玩家卡片选择互动对象';
+  }
+  if (el.clearSocialTargetBtn) {
+    el.clearSocialTargetBtn.classList.toggle('hidden', !target);
+  }
+  const targetable = Boolean(target);
   propEmoteButtons.forEach((btn) => {
     btn.disabled = !targetable;
   });
@@ -3035,11 +3061,14 @@ function sendEmote(kind, code, targetId = '', counter = false) {
   socket.emit('sendEmote', payload);
 }
 
-function sendSocialChatMessage(rawMessage) {
+function sendSocialChatMessage(rawMessage, opts = {}) {
   if (!roomState || !ensureConnected()) return false;
   const message = String(rawMessage || '').trim().slice(0, 120);
   if (!message) return false;
   socket.emit('chatMessage', { message });
+  if (opts.overlay) {
+    socket.emit('sendSocialMessage', { message });
+  }
   return true;
 }
 
@@ -3097,7 +3126,7 @@ function renderRoom() {
   renderActions();
   renderResult();
   renderLogs();
-  refreshEmoteTargetOptions();
+  refreshSocialTargetState();
   renderSocialChatFeed();
   renderProfitChart();
 }
@@ -3172,6 +3201,8 @@ socket.on('disconnect', () => {
   clearCappuccinoCelebration();
   pendingCappuccinoCelebration = null;
   trackedCappuccinoHandNo = null;
+  rebuyPromptToken = '';
+  closeRebuyModal();
   resetSocialState();
   if (el.lobbyView.classList.contains('hidden')) {
     showNotice(el.tableNotice, '连接已断开，正在尝试重连...', 'error');
@@ -3191,6 +3222,8 @@ socket.on('connect_error', () => {
   clearCappuccinoCelebration();
   pendingCappuccinoCelebration = null;
   trackedCappuccinoHandNo = null;
+  rebuyPromptToken = '';
+  closeRebuyModal();
   resetSocialState();
   if (el.lobbyView.classList.contains('hidden')) {
     showNotice(el.tableNotice, '连接失败，请检查网络后重试', 'error');
@@ -3218,6 +3251,8 @@ socket.on('joinedRoom', ({ playerId }) => {
   resetCommunityRevealState(null);
   trackedSeatDealHandNo = null;
   trackedTurnCueToken = null;
+  rebuyPromptToken = '';
+  closeRebuyModal();
   resetSocialState();
   meId = playerId;
   replayState = null;
@@ -3240,6 +3275,12 @@ socket.on('roomState', (state) => {
 
 socket.on('emoteEvent', (payload) => {
   handleIncomingEmote(payload);
+});
+
+socket.on('socialMessageEvent', (payload) => {
+  if (!payload || !roomState) return;
+  if (payload.roomId && payload.roomId !== roomState.roomId) return;
+  spawnSocialMessageBubble(payload);
 });
 
 socket.on('handHistoryData', ({ items }) => {
@@ -3271,6 +3312,8 @@ socket.on('kicked', (payload) => {
   resetCommunityRevealState(null);
   trackedSeatDealHandNo = null;
   trackedTurnCueToken = null;
+  rebuyPromptToken = '';
+  closeRebuyModal();
   resetSocialState();
   showNotice(el.notice, payload?.reason || '你已被移出房间', 'error');
   roomState = null;
@@ -3460,6 +3503,8 @@ el.leaveBtn.addEventListener('click', () => {
   resetCommunityRevealState(null);
   trackedSeatDealHandNo = null;
   trackedTurnCueToken = null;
+  rebuyPromptToken = '';
+  closeRebuyModal();
   resetSocialState();
   socket.emit('leaveRoom');
   roomState = null;
@@ -3604,6 +3649,13 @@ el.saveConfigBtn.addEventListener('click', () => {
 
 if (el.socialCollapseBtn) {
   el.socialCollapseBtn.addEventListener('click', () => {
+    uiSocialCollapsed = true;
+    applySocialDockState(true);
+  });
+}
+
+if (el.socialLauncherBtn) {
+  el.socialLauncherBtn.addEventListener('click', () => {
     uiSocialCollapsed = !uiSocialCollapsed;
     applySocialDockState(true);
   });
@@ -3627,9 +3679,11 @@ if (el.socialSoundBtn) {
   });
 }
 
-if (el.emoteTargetSelect) {
-  el.emoteTargetSelect.addEventListener('change', () => {
-    syncPropEmoteButtons();
+if (el.clearSocialTargetBtn) {
+  el.clearSocialTargetBtn.addEventListener('click', () => {
+    socialTargetId = '';
+    refreshSocialTargetState();
+    renderSeatMap();
   });
 }
 
@@ -3644,9 +3698,9 @@ quickEmoteButtons.forEach((btn) => {
 propEmoteButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
     const code = String(btn.dataset.emoteCode || '').trim();
-    const targetId = String(el.emoteTargetSelect?.value || '');
+    const targetId = String(socialTargetId || '');
     if (!code || !targetId) {
-      showNotice(el.tableNotice, '请先选择互动目标', 'error');
+      showNotice(el.tableNotice, '请先点击玩家卡片选择互动目标', 'error');
       return;
     }
     sendEmote('prop', code, targetId);
@@ -3664,7 +3718,7 @@ if (el.counterBtn) {
 if (el.socialChatSendBtn) {
   el.socialChatSendBtn.addEventListener('click', () => {
     if (!el.socialChatInput) return;
-    if (sendSocialChatMessage(el.socialChatInput.value)) {
+    if (sendSocialChatMessage(el.socialChatInput.value, { overlay: true })) {
       el.socialChatInput.value = '';
     }
   });
@@ -3674,17 +3728,32 @@ if (el.socialChatInput) {
   el.socialChatInput.addEventListener('keydown', (evt) => {
     if (evt.key !== 'Enter') return;
     evt.preventDefault();
-    if (sendSocialChatMessage(el.socialChatInput.value)) {
+    if (sendSocialChatMessage(el.socialChatInput.value, { overlay: true })) {
       el.socialChatInput.value = '';
     }
   });
 }
 
 el.sendChatBtn.addEventListener('click', () => {
-  if (sendSocialChatMessage(el.chatInput.value)) {
+  if (sendSocialChatMessage(el.chatInput.value, { overlay: false })) {
     el.chatInput.value = '';
   }
 });
+
+if (el.rebuyConfirmBtn) {
+  el.rebuyConfirmBtn.addEventListener('click', () => {
+    closeRebuyModal();
+    socket.emit('rebuy');
+  });
+}
+
+if (el.rebuyDeclineBtn) {
+  el.rebuyDeclineBtn.addEventListener('click', () => {
+    closeRebuyModal();
+    if (roomState?.settings?.allowSpectators) socket.emit('becomeSpectator');
+    else socket.emit('leaveRoom');
+  });
+}
 
 el.chatInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') el.sendChatBtn.click();
@@ -3732,7 +3801,7 @@ refreshActionPanelToggleButton();
 refreshSideTabs();
 uiEmoteSoundPack = normalizeEmoteSoundPack(uiEmoteSoundPack);
 applySocialDockState();
-syncPropEmoteButtons();
+refreshSocialTargetState();
 if (uiProfitFilter !== 'me' && uiProfitFilter !== 'all') uiProfitFilter = 'all';
 refreshProfitFilterButtons();
 applySideLayout();

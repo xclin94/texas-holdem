@@ -10,6 +10,7 @@ const EMOTE_LIMIT_COUNT = 20;
 const EMOTE_MIN_INTERVAL_MS = 350;
 const EMOTE_COMBO_WINDOW_MS = 2200;
 const EMOTE_COMBO_MAX = 5;
+const SOCIAL_MESSAGE_MAX_LEN = 120;
 const QUICK_EMOTE_SET = new Set(['like', 'laugh', 'wow', 'cry', '666', 'heart']);
 const PROP_EMOTE_SET = new Set(['egg', 'flower', 'water', 'rocket', 'kiss', 'tomato']);
 
@@ -303,9 +304,17 @@ function resetHandFlags(player) {
   player.lastAction = '';
 }
 
+function setPlayerLastAction(player, actionText, bumpSeq = true) {
+  if (!player) return;
+  player.lastAction = String(actionText || '');
+  if (!Number.isFinite(player.lastActionSeq)) player.lastActionSeq = 0;
+  if (bumpSeq) player.lastActionSeq += 1;
+}
+
 function initPlayer(player, startingStack) {
   if (!Number.isFinite(player.rebuyCount)) player.rebuyCount = 0;
   if (!Number.isFinite(player.rebuyTotal)) player.rebuyTotal = 0;
+  if (!Number.isFinite(player.lastActionSeq)) player.lastActionSeq = 0;
   player.ready = true;
   player.stack = startingStack;
   resetHandFlags(player);
@@ -323,7 +332,7 @@ function performRebuy(room, player, source = 'manual') {
   player.ready = true;
   player.rebuyCount = (Number(player.rebuyCount) || 0) + 1;
   player.rebuyTotal = (Number(player.rebuyTotal) || 0) + amount;
-  player.lastAction = '重新买入';
+  setPlayerLastAction(player, '重新买入');
   logRoom(room, `${player.name} 重新买入 ${amount}${source === 'auto' ? '（自动）' : ''}`);
   return { ok: true, amount };
 }
@@ -631,7 +640,7 @@ function resetStreet(room) {
   room.players.forEach((p) => {
     if (p.inHand) {
       p.betThisStreet = 0;
-      p.lastAction = '';
+      setPlayerLastAction(p, '', false);
     }
   });
   game.currentBet = 0;
@@ -971,7 +980,7 @@ function applyStraddleDecision(room, player, action, rawAmount) {
   }
 
   if (action === 'skipstraddle') {
-    player.lastAction = '放弃 straddle';
+    setPlayerLastAction(player, '放弃 straddle');
     appendGameEvent(room, 'straddle_skip', `${player.name} 放弃 straddle`, { playerId: player.id });
     game.awaitingStraddle = false;
     game.straddlePlayerId = null;
@@ -1001,7 +1010,7 @@ function applyStraddleDecision(room, player, action, rawAmount) {
   game.straddleAmount = target;
   game.awaitingStraddle = false;
   game.straddlePlayerId = null;
-  player.lastAction = player.stack === 0 ? `全下 straddle 到 ${target}` : `straddle 到 ${target}`;
+  setPlayerLastAction(player, player.stack === 0 ? `全下 straddle 到 ${target}` : `straddle 到 ${target}`);
   appendGameEvent(room, 'straddle', `${player.name} straddle 到 ${target}`, {
     playerId: player.id,
     amount: target,
@@ -1034,7 +1043,7 @@ function applyPlayerAction(room, playerId, action, rawAmount) {
 
   if (action === 'fold') {
     player.folded = true;
-    player.lastAction = '弃牌';
+    setPlayerLastAction(player, '弃牌');
     appendGameEvent(room, 'action', `${player.name} 弃牌`, { playerId: player.id, action: 'fold' });
     removeFromPending(room, playerId);
     completeActionAndAdvance(room, playerId);
@@ -1043,7 +1052,7 @@ function applyPlayerAction(room, playerId, action, rawAmount) {
 
   if (action === 'check') {
     if (toCall !== 0) return { ok: false, error: '当前不能过牌' };
-    player.lastAction = '过牌';
+    setPlayerLastAction(player, '过牌');
     appendGameEvent(room, 'action', `${player.name} 过牌`, { playerId: player.id, action: 'check' });
     removeFromPending(room, playerId);
     completeActionAndAdvance(room, playerId);
@@ -1053,7 +1062,7 @@ function applyPlayerAction(room, playerId, action, rawAmount) {
   if (action === 'call') {
     if (toCall <= 0) return { ok: false, error: '当前不需要跟注' };
     const paid = postChips(player, toCall);
-    player.lastAction = paid < toCall ? `跟注全下 ${paid}` : `跟注 ${paid}`;
+    setPlayerLastAction(player, paid < toCall ? `跟注全下 ${paid}` : `跟注 ${paid}`);
     appendGameEvent(room, 'action', `${player.name} ${player.lastAction}`, {
       playerId: player.id,
       action: 'call',
@@ -1077,10 +1086,10 @@ function applyPlayerAction(room, playerId, action, rawAmount) {
       const raiseSize = target - prevBet;
       if (raiseSize >= game.minRaise) game.minRaise = raiseSize;
       game.currentBet = target;
-      player.lastAction = `全下到 ${target}`;
+      setPlayerLastAction(player, `全下到 ${target}`);
       resetPendingAfterAggression(room, playerId);
     } else {
-      player.lastAction = `全下 ${committed}`;
+      setPlayerLastAction(player, `全下 ${committed}`);
       removeFromPending(room, playerId);
     }
     appendGameEvent(room, 'action', `${player.name} ${player.lastAction}`, {
@@ -1109,7 +1118,7 @@ function applyPlayerAction(room, playerId, action, rawAmount) {
     postChips(player, target - player.betThisStreet);
     game.currentBet = target;
     game.minRaise = target;
-    player.lastAction = player.stack === 0 ? `全下下注 ${target}` : `下注 ${target}`;
+    setPlayerLastAction(player, player.stack === 0 ? `全下下注 ${target}` : `下注 ${target}`);
     appendGameEvent(room, 'action', `${player.name} ${player.lastAction}`, {
       playerId: player.id,
       action: 'bet',
@@ -1137,7 +1146,7 @@ function applyPlayerAction(room, playerId, action, rawAmount) {
     if (raiseSize >= game.minRaise) game.minRaise = raiseSize;
     game.currentBet = target;
 
-    player.lastAction = player.stack === 0 ? `全下到 ${target}` : `加注到 ${target}`;
+    setPlayerLastAction(player, player.stack === 0 ? `全下到 ${target}` : `加注到 ${target}`);
     appendGameEvent(room, 'action', `${player.name} ${player.lastAction}`, {
       playerId: player.id,
       action: 'raise',
@@ -1284,7 +1293,7 @@ function startHand(room, requestedBy) {
     p.allIn = false;
     p.betThisStreet = 0;
     p.totalContribution = 0;
-    p.lastAction = '';
+    setPlayerLastAction(p, '', false);
     p.holeCards = [dealCard(room.game), dealCard(room.game)];
   });
 
@@ -1296,8 +1305,8 @@ function startHand(room, requestedBy) {
   room.game.currentBet = bbPaid;
   room.game.minRaise = room.game.bigBlindAmount;
 
-  sbPlayer.lastAction = `小盲 ${sbPaid}`;
-  bbPlayer.lastAction = `大盲 ${bbPaid}`;
+  setPlayerLastAction(sbPlayer, `小盲 ${sbPaid}`);
+  setPlayerLastAction(bbPlayer, `大盲 ${bbPaid}`);
 
   logRoom(room, `第 ${room.game.handNo} 手牌开始，庄家 ${getPlayer(room, dealerId)?.name || ''}`);
   appendGameEvent(room, 'hand_start', `第 ${room.game.handNo} 手牌开始`, {
@@ -1468,6 +1477,7 @@ function serializeRoom(room, viewerId) {
         betThisStreet: p.betThisStreet,
         totalContribution: p.totalContribution,
         lastAction: p.lastAction,
+        lastActionSeq: Number(p.lastActionSeq) || 0,
         holeCards: visibleHoleCards,
       };
     });
@@ -1617,7 +1627,7 @@ function forceRemoveMember(room, targetId, opts = {}) {
   if (room.game && !room.game.finished && player.inHand && !player.folded) {
     player.connected = false;
     player.folded = true;
-    player.lastAction = ban ? '被封禁自动弃牌' : '被移出自动弃牌';
+    setPlayerLastAction(player, ban ? '被封禁自动弃牌' : '被移出自动弃牌');
     removeFromPending(room, player.id);
     appendGameEvent(room, 'admin', `${player.name} 被房主${ban ? '封禁' : '移出'}并自动弃牌`, {
       playerId: player.id,
@@ -1667,7 +1677,7 @@ function leaveRoom(socket, silent = false) {
   if (room.game && !room.game.finished && player.inHand && !player.folded) {
     player.connected = false;
     player.folded = true;
-    player.lastAction = '离开自动弃牌';
+    setPlayerLastAction(player, '离开自动弃牌');
     removeFromPending(room, player.id);
     completeActionAndAdvance(room, player.id);
     logRoom(room, `${player.name} 离开房间，自动弃牌`);
@@ -1993,14 +2003,7 @@ io.on('connection', (socket) => {
     }
 
     if (player.stack <= 0) {
-      const rb = performRebuy(room, player, 'auto');
-      if (!rb.ok) {
-        sendError(socket, rb.error);
-        return;
-      }
-      logRoom(room, `${player.name} 已准备`);
-      broadcastRoom(room);
-      broadcastLobby();
+      sendError(socket, '你已没有筹码，请先重新买入或离座观战');
       return;
     }
 
@@ -2236,6 +2239,37 @@ io.on('connection', (socket) => {
     broadcastRoom(room);
   });
 
+  socket.on('sendSocialMessage', (payload = {}) => {
+    const room = currentRoomOfSocket(socket);
+    if (!room) return;
+
+    const role = getRole(room, socket.id);
+    if (!role) return;
+
+    const message = String(payload.message || '').trim().slice(0, SOCIAL_MESSAGE_MAX_LEN);
+    if (!message) return;
+
+    const limit = allowEmoteSend(room, socket.id);
+    if (!limit.ok) {
+      sendError(socket, limit.error);
+      return;
+    }
+
+    const fromPlayer = getPlayer(room, socket.id);
+    const fromSpectator = getSpectator(room, socket.id);
+    const fromName = fromPlayer?.name || fromSpectator?.name || '匿名';
+    room.lastEmoteSeq += 1;
+    io.to(room.id).emit('socialMessageEvent', {
+      id: `${room.id}-chat-${room.lastEmoteSeq}`,
+      ts: Date.now(),
+      roomId: room.id,
+      fromId: socket.id,
+      fromName,
+      fromRole: role,
+      message,
+    });
+  });
+
   socket.on('sendEmote', (payload = {}) => {
     const room = currentRoomOfSocket(socket);
     if (!room) return;
@@ -2340,7 +2374,7 @@ io.on('connection', (socket) => {
 
     if (room.game && !room.game.finished && player.inHand && !player.folded) {
       player.folded = true;
-      player.lastAction = '掉线自动弃牌';
+      setPlayerLastAction(player, '掉线自动弃牌');
       removeFromPending(room, player.id);
       completeActionAndAdvance(room, player.id);
       logRoom(room, `${player.name} 掉线，自动弃牌`);

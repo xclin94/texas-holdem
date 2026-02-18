@@ -77,7 +77,8 @@ body[data-motion='reduced'] .coffee-pour,
 body[data-motion='reduced'] .cappuccino-msg,
 body[data-motion='reduced'] .emote-bubble,
 body[data-motion='reduced'] .emote-shot,
-body[data-motion='reduced'] .emote-impact {
+body[data-motion='reduced'] .emote-impact,
+body[data-motion='reduced'] .social-msg-bubble {
   animation: none !important;
 }
 
@@ -110,30 +111,229 @@ body[data-motion='reduced'] .emote-impact {
 .hero {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: stretch;
   margin-bottom: 12px;
-  gap: 10px;
+  gap: 16px;
 }
 
-.hero h1 {
+.hero-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  gap: 6px;
+  position: relative;
+  z-index: 2;
+}
+
+.hero-copy h1 {
   margin: 0;
   font-family: 'Space Grotesk', sans-serif;
   font-size: 34px;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.4px;
+  color: #fff4d3;
+  text-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
 }
 
-.hero p {
-  margin: 6px 0 0;
-  color: var(--muted);
+.hero-copy p {
+  margin: 0;
+  color: #d4e9d8;
+  font-size: 14px;
+  max-width: 360px;
 }
 
-.pill {
-  border: 1px solid rgba(232, 187, 97, 0.38);
-  color: var(--gold-2);
+.lobby-hero {
+  position: relative;
+  border: 1px solid rgba(232, 187, 97, 0.26);
+  border-radius: 22px;
+  padding: 16px;
+  background:
+    radial-gradient(circle at 8% 14%, rgba(255, 211, 121, 0.2), transparent 34%),
+    radial-gradient(circle at 86% 16%, rgba(118, 212, 255, 0.16), transparent 32%),
+    linear-gradient(130deg, rgba(6, 32, 22, 0.9), rgba(10, 42, 28, 0.86) 46%, rgba(7, 25, 17, 0.92));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 236, 180, 0.1),
+    0 12px 28px rgba(0, 0, 0, 0.34);
+  overflow: hidden;
+}
+
+.hero-scene {
+  position: relative;
+  width: min(460px, 54vw);
+  min-height: 164px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    radial-gradient(circle at 50% 88%, rgba(21, 88, 56, 0.96), rgba(7, 30, 20, 0.95) 58%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.03), rgba(0, 0, 0, 0.28));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 237, 184, 0.1),
+    0 10px 24px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.scene-spotlight {
+  position: absolute;
+  top: -22px;
+  width: 80px;
+  height: 128px;
   border-radius: 999px;
-  padding: 7px 12px;
-  font-size: 12px;
-  letter-spacing: 0.5px;
+  background: linear-gradient(180deg, rgba(255, 236, 184, 0.36), rgba(255, 236, 184, 0));
+  filter: blur(1px);
+}
+
+.scene-spotlight.light-a {
+  left: 12%;
+  transform: rotate(8deg);
+}
+
+.scene-spotlight.light-b {
+  right: 12%;
+  transform: rotate(-8deg);
+}
+
+.scene-crowd {
+  position: absolute;
+  top: 34%;
+  width: 130px;
+  height: 44px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(26, 37, 45, 0.8), rgba(11, 19, 24, 0.86));
+  opacity: 0.75;
+}
+
+.scene-crowd::before,
+.scene-crowd::after {
+  content: '';
+  position: absolute;
+  border-radius: 999px;
+  background: rgba(29, 42, 52, 0.86);
+}
+
+.scene-crowd::before {
+  left: 18%;
+  right: 18%;
+  top: -10px;
+  height: 16px;
+}
+
+.scene-crowd::after {
+  left: 30%;
+  right: 30%;
+  top: -18px;
+  height: 14px;
+}
+
+.scene-crowd.crowd-left {
+  left: -18px;
+}
+
+.scene-crowd.crowd-right {
+  right: -18px;
+}
+
+.scene-stage {
+  position: absolute;
+  left: 50%;
+  top: 56%;
+  width: 74%;
+  height: 46%;
+  transform: translate(-50%, -50%) perspective(500px) rotateX(15deg);
+  border-radius: 999px;
+  border: 2px solid rgba(236, 191, 101, 0.5);
+  background: radial-gradient(circle at 50% 46%, rgba(26, 104, 63, 0.9), rgba(12, 54, 35, 0.95));
+  box-shadow:
+    inset 0 0 0 8px rgba(0, 0, 0, 0.22),
+    0 18px 24px rgba(0, 0, 0, 0.26);
+}
+
+.scene-stage-rim {
+  position: absolute;
+  left: 50%;
+  top: 56%;
+  width: 79%;
+  height: 52%;
+  transform: translate(-50%, -50%) perspective(500px) rotateX(15deg);
+  border-radius: 999px;
+  border: 2px solid rgba(255, 227, 159, 0.22);
+  pointer-events: none;
+}
+
+.scene-card {
+  position: absolute;
+  width: 48px;
+  height: 66px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  background: linear-gradient(170deg, #ffffff, #f2f6fb);
+  color: #2a1410;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.34);
+}
+
+.scene-card.card-a {
+  left: 24%;
+  top: 16%;
+  transform: rotate(-14deg);
+}
+
+.scene-card.card-k {
+  right: 22%;
+  top: 18%;
+  transform: rotate(12deg);
+  color: #8d1f38;
+}
+
+.scene-chip-stack {
+  position: absolute;
+  display: inline-flex;
+  flex-direction: column-reverse;
+  gap: 1px;
+}
+
+.scene-chip-stack i {
+  display: block;
+  width: 34px;
+  height: 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 241, 191, 0.74);
+  background: linear-gradient(180deg, rgba(255, 247, 224, 0.96), rgba(232, 168, 70, 0.95));
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.26);
+}
+
+.scene-chip-stack.stack-left {
+  left: 38%;
+  bottom: 20%;
+  transform: rotate(-12deg);
+}
+
+.scene-chip-stack.stack-right {
+  left: 50%;
+  bottom: 16%;
+  transform: rotate(10deg);
+}
+
+.scene-light {
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 223, 152, 0.34), rgba(255, 223, 152, 0));
+}
+
+.scene-light.light-1 {
+  left: -12px;
+  top: -12px;
+}
+
+.scene-light.light-2 {
+  right: -12px;
+  top: -12px;
 }
 
 .grid {
@@ -683,27 +883,71 @@ input[type='checkbox'] {
   overflow: hidden;
 }
 
+.social-launcher {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 230, 162, 0.5);
+  background: linear-gradient(140deg, rgba(20, 31, 24, 0.9), rgba(6, 16, 11, 0.94));
+  color: #ffe7b2;
+  box-shadow:
+    0 10px 18px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 1px rgba(255, 239, 190, 0.16);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 7;
+}
+
+.social-launcher:hover {
+  border-color: rgba(255, 233, 176, 0.8);
+}
+
+.social-launcher.active {
+  border-color: rgba(255, 233, 176, 0.95);
+  box-shadow:
+    0 12px 20px rgba(0, 0, 0, 0.42),
+    0 0 0 2px rgba(255, 220, 140, 0.24);
+}
+
+.social-launcher .icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.social-launcher-badge {
+  position: absolute;
+  right: -2px;
+  top: -2px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 211, 204, 0.92);
+  background: rgba(168, 34, 51, 0.95);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .social-dock {
   position: absolute;
-  right: 10px;
-  bottom: 8px;
-  width: min(460px, calc(100% - 20px));
+  left: 66px;
+  bottom: 10px;
+  width: min(420px, calc(100% - 82px));
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(5, 16, 10, 0.78);
+  background: rgba(5, 16, 10, 0.88);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
   backdrop-filter: blur(5px);
   z-index: 6;
   pointer-events: auto;
-}
-
-.social-dock.collapsed {
-  width: auto;
-  min-width: 180px;
-}
-
-.social-dock.collapsed .social-body {
-  display: none;
 }
 
 .social-head {
@@ -731,7 +975,7 @@ input[type='checkbox'] {
 .social-body {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
   padding: 0 10px 10px;
 }
 
@@ -746,20 +990,28 @@ input[type='checkbox'] {
   min-width: 56px;
 }
 
-.social-target-row select {
-  flex: 1 1 140px;
-  min-width: 140px;
+.social-target-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   border-radius: 9px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(0, 0, 0, 0.26);
-  color: var(--text);
-  padding: 5px 8px;
+  color: #d8ebdd;
   font-size: 12px;
+  padding: 6px 8px;
 }
 
-.social-target-row select:focus {
-  outline: none;
-  border-color: rgba(232, 187, 97, 0.8);
+.social-target-info span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.social-target-info .btn.tiny {
+  padding: 3px 7px;
+  flex: 0 0 auto;
 }
 
 .social-counter {
@@ -777,25 +1029,6 @@ input[type='checkbox'] {
 
 .social-chat-feed-wrap {
   position: relative;
-}
-
-.social-unread {
-  position: absolute;
-  right: 6px;
-  top: 6px;
-  min-width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 211, 204, 0.85);
-  background: rgba(168, 34, 51, 0.9);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  z-index: 1;
 }
 
 .social-chat-feed {
@@ -866,7 +1099,7 @@ input[type='checkbox'] {
   font-size: 12px;
   line-height: 1;
   opacity: 0;
-  animation: emoteBubbleFloat 1700ms ease-out forwards;
+  animation: emoteBubbleFloat 5000ms ease-out forwards;
   box-shadow: 0 7px 18px rgba(0, 0, 0, 0.35);
 }
 
@@ -934,7 +1167,7 @@ input[type='checkbox'] {
   padding: 4px 9px;
   color: #ffe8b8;
   opacity: 0;
-  animation: emoteImpactPop 940ms ease-out forwards;
+  animation: emoteImpactPop 5000ms ease-out forwards;
 }
 
 .emote-impact.combo {
@@ -950,6 +1183,37 @@ input[type='checkbox'] {
 .emote-impact small {
   font-size: 11px;
   white-space: nowrap;
+}
+
+.social-msg-bubble {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(calc(var(--bx) - 50%), calc(var(--by) - 50%));
+  max-width: 240px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 236, 190, 0.54);
+  background: linear-gradient(155deg, rgba(12, 17, 12, 0.9), rgba(22, 33, 22, 0.9));
+  color: #f4ead2;
+  padding: 6px 9px;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.34);
+  opacity: 0;
+  animation: socialMsgFloat 5000ms ease-out forwards;
+}
+
+.social-msg-bubble b {
+  font-size: 11px;
+  line-height: 1.1;
+  color: #ffe7ae;
+}
+
+.social-msg-bubble span {
+  font-size: 12px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .chip-push-layer {
@@ -1000,7 +1264,7 @@ input[type='checkbox'] {
 .cappuccino-celebration {
   position: absolute;
   inset: 0;
-  z-index: 4;
+  z-index: 8;
   pointer-events: none;
   overflow: hidden;
 }
@@ -1085,7 +1349,7 @@ input[type='checkbox'] {
   font-weight: 700;
   white-space: nowrap;
   opacity: 0;
-  animation: cappuccinoMsg 1500ms ease-out 620ms forwards;
+  animation: cappuccinoMsg 4200ms ease-out 620ms forwards;
 }
 
 .seat-node {
@@ -1129,6 +1393,13 @@ input[type='checkbox'] {
 .seat-node.me {
   border-color: rgba(232, 187, 97, 0.92);
   box-shadow: 0 0 0 2px rgba(232, 187, 97, 0.25);
+}
+
+.seat-node.social-targeted {
+  border-color: rgba(122, 224, 255, 0.88);
+  box-shadow:
+    0 0 0 2px rgba(122, 224, 255, 0.26),
+    0 8px 16px rgba(0, 0, 0, 0.3);
 }
 
 .seat-node.turn {
@@ -1370,31 +1641,78 @@ input[type='checkbox'] {
   margin-top: 2px;
   margin-bottom: 2px;
   display: inline-flex;
-  align-items: center;
-  gap: 2px;
+  align-items: flex-end;
+  gap: 7px;
   border-radius: 999px;
-  padding: 1px 6px 1px 4px;
-  background: rgba(8, 18, 14, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 3px 8px 3px 6px;
+  background: rgba(8, 18, 14, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.16);
 }
 
-.seat-stack-visual i {
-  width: 8px;
+.chip-pile {
+  position: relative;
+  width: 30px;
+  height: 20px;
+}
+
+.chip-pile i {
+  position: absolute;
+  left: 50%;
+  width: 24px;
   height: 8px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 233, 184, 0.65);
-  background: radial-gradient(circle at 35% 30%, rgba(255, 249, 227, 0.92), rgba(232, 187, 97, 0.88) 58%, rgba(124, 81, 28, 0.85));
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.26);
+  border: 1px solid rgba(255, 233, 184, 0.75);
+  background: linear-gradient(180deg, rgba(255, 246, 220, 0.96), rgba(234, 170, 72, 0.94));
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.28),
+    inset 0 0 0 1px rgba(255, 248, 223, 0.2);
+  transform: translateX(-50%);
+}
+
+.chip-pile i:nth-child(1) {
+  bottom: 0;
+}
+
+.chip-pile i:nth-child(2) {
+  bottom: 2px;
+}
+
+.chip-pile i:nth-child(3) {
+  bottom: 4px;
+}
+
+.chip-pile i:nth-child(4) {
+  bottom: 6px;
+}
+
+.chip-pile i:nth-child(5) {
+  bottom: 8px;
+}
+
+.chip-pile i:nth-child(6) {
+  bottom: 10px;
+}
+
+.chip-pile i:nth-child(7) {
+  bottom: 12px;
+}
+
+.chip-pile i:nth-child(odd) {
+  margin-left: -1px;
+}
+
+.chip-pile i:nth-child(even) {
+  margin-left: 1px;
 }
 
 .seat-stack-visual span {
-  margin-left: 2px;
-  font-size: 9px;
+  font-size: 11px;
+  font-weight: 700;
   color: #ffe8b8;
-  letter-spacing: 0.1px;
+  letter-spacing: 0.2px;
 }
 
-.seat-stack-visual.tier-0 i {
+.seat-stack-visual.tier-0 .chip-pile i {
   opacity: 0.15;
 }
 
@@ -1402,29 +1720,27 @@ input[type='checkbox'] {
   color: #b5c9bc;
 }
 
-.seat-stack-visual.tier-1 i:nth-child(2),
-.seat-stack-visual.tier-1 i:nth-child(3) {
+.seat-stack-visual.tier-1 .chip-pile i:nth-child(n + 3) {
   opacity: 0.2;
 }
 
-.seat-stack-visual.tier-2 i:nth-child(3) {
+.seat-stack-visual.tier-2 .chip-pile i:nth-child(n + 5) {
   opacity: 0.25;
 }
 
-.seat-stack-visual.tier-3 i {
-  transform: scale(1);
-}
-
-.seat-stack-visual.tier-4 i {
-  transform: scale(1.1);
+.seat-stack-visual.tier-4 .chip-pile i {
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.32),
+    inset 0 0 0 1px rgba(255, 248, 223, 0.26);
 }
 
 .seat-stack-visual.tier-5 {
   box-shadow: 0 0 0 1px rgba(232, 187, 97, 0.26);
 }
 
-.seat-stack-visual.tier-5 i {
-  transform: scale(1.15);
+.seat-stack-visual.tier-5 .chip-pile i {
+  border-color: rgba(255, 236, 176, 0.9);
+  background: linear-gradient(180deg, rgba(255, 249, 231, 0.98), rgba(244, 182, 84, 0.96));
 }
 
 .seat-node.compact .seat-bet-chip {
@@ -1856,11 +2172,14 @@ input[type='checkbox'] {
     transform: translate(calc(var(--bx) - 50%), calc(var(--by) - 50%)) translateY(7px) scale(0.84);
     opacity: 0;
   }
-  16% {
+  10% {
+    opacity: 1;
+  }
+  82% {
     opacity: 1;
   }
   100% {
-    transform: translate(calc(var(--bx) - 50%), calc(var(--by) - 50%)) translateY(-34px) scale(1);
+    transform: translate(calc(var(--bx) - 50%), calc(var(--by) - 50%)) translateY(-28px) scale(1);
     opacity: 0;
   }
 }
@@ -1887,12 +2206,34 @@ input[type='checkbox'] {
     transform: translate(calc(var(--ix) - 50%), calc(var(--iy) - 50%)) scale(0.78);
     opacity: 0;
   }
-  18% {
+  10% {
     transform: translate(calc(var(--ix) - 50%), calc(var(--iy) - 50%)) scale(1.05);
     opacity: 1;
   }
+  84% {
+    transform: translate(calc(var(--ix) - 50%), calc(var(--iy) - 50%)) translateY(-4px) scale(1);
+    opacity: 1;
+  }
   100% {
-    transform: translate(calc(var(--ix) - 50%), calc(var(--iy) - 50%)) translateY(-10px) scale(0.97);
+    transform: translate(calc(var(--ix) - 50%), calc(var(--iy) - 50%)) translateY(-10px) scale(0.96);
+    opacity: 0;
+  }
+}
+
+@keyframes socialMsgFloat {
+  0% {
+    transform: translate(calc(var(--bx) - 50%), calc(var(--by) - 50%)) translateY(10px) scale(0.92);
+    opacity: 0;
+  }
+  10% {
+    transform: translate(calc(var(--bx) - 50%), calc(var(--by) - 50%)) translateY(0) scale(1);
+    opacity: 1;
+  }
+  84% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(var(--bx) - 50%), calc(var(--by) - 50%)) translateY(-22px) scale(0.98);
     opacity: 0;
   }
 }
@@ -2166,6 +2507,48 @@ input[type='checkbox'] {
   color: var(--text);
 }
 
+.rebuy-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 7600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(3, 10, 7, 0.72);
+  backdrop-filter: blur(3px);
+  padding: 14px;
+}
+
+.rebuy-modal-card {
+  width: min(440px, 100%);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 232, 172, 0.34);
+  background: linear-gradient(160deg, rgba(10, 30, 21, 0.98), rgba(5, 15, 11, 0.98));
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.45);
+  padding: 14px;
+}
+
+.rebuy-modal-card h3 {
+  margin: 0 0 8px;
+  color: #ffe7b2;
+}
+
+.rebuy-modal-card p {
+  margin: 0 0 12px;
+  color: #d4ead8;
+  font-size: 14px;
+}
+
+.rebuy-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rebuy-modal-actions .btn {
+  flex: 1 1 160px;
+}
+
 @media (max-width: 1080px) {
   .lobby-grid,
   .table-grid {
@@ -2211,8 +2594,18 @@ input[type='checkbox'] {
       max(12px, env(safe-area-inset-bottom, 0px)) max(10px, env(safe-area-inset-left, 0px));
   }
 
-  .hero h1 {
+  .hero {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hero-copy h1 {
     font-size: 28px;
+  }
+
+  .hero-scene {
+    width: 100%;
+    min-height: 152px;
   }
 
   .card {
@@ -2367,11 +2760,23 @@ input[type='checkbox'] {
     padding-bottom: 120px;
   }
 
+  .social-launcher {
+    left: 8px;
+    bottom: 8px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .social-launcher .icon {
+    font-size: 18px;
+  }
+
   .social-dock {
-    right: 6px;
-    left: 6px;
+    left: 58px;
+    right: 8px;
     width: auto;
-    bottom: 6px;
+    bottom: 8px;
+    max-width: none;
   }
 
   .social-row .btn.tiny {
@@ -2379,9 +2784,13 @@ input[type='checkbox'] {
     min-width: 52px;
   }
 
-  .social-target-row select {
-    min-width: 118px;
-    flex-basis: 118px;
+  .social-target-info {
+    gap: 6px;
+    font-size: 11px;
+  }
+
+  .social-target-info span {
+    white-space: normal;
   }
 
   .social-chat-feed {
@@ -2553,7 +2962,14 @@ input[type='checkbox'] {
 
   .table-canvas {
     min-height: 720px;
-    padding-bottom: 220px;
+    padding-bottom: 188px;
+  }
+
+  .social-launcher {
+    left: 6px;
+    bottom: 6px;
+    width: 42px;
+    height: 42px;
   }
 
   .social-head {
@@ -2578,6 +2994,12 @@ input[type='checkbox'] {
     padding: 3px 5px;
     font-size: 10px;
     min-width: 48px;
+  }
+
+  .social-dock {
+    left: 54px;
+    right: 6px;
+    bottom: 6px;
   }
 
   .social-chat-input {
@@ -2659,13 +3081,21 @@ input[type='checkbox'] {
 
   .table-canvas {
     min-height: 560px;
-    padding-bottom: 92px;
+    padding-bottom: 84px;
+  }
+
+  .social-launcher {
+    left: 6px;
+    bottom: 4px;
+    width: 40px;
+    height: 40px;
   }
 
   .social-dock {
+    left: 52px;
     right: 6px;
     bottom: 4px;
-    max-width: 390px;
+    max-width: none;
   }
 
   .social-chat-feed {

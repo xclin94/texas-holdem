@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Holdem Room</title>
+    <title>德州扑克好友局</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
@@ -13,12 +13,29 @@
     <div class="app-bg"></div>
     <main class="app">
       <section id="lobbyView" class="view">
-        <header class="hero">
-          <div>
-            <h1>Holdem Room</h1>
-            <p>多人德州扑克 · 房间制 · 实时同步</p>
+        <header class="hero lobby-hero">
+          <div class="hero-copy">
+            <h1>德州扑克好友牌局</h1>
+            <p>创建房间，直接开打。</p>
           </div>
-          <div class="pill">No Limit Texas Hold'em</div>
+          <div class="hero-scene" aria-hidden="true">
+            <div class="scene-spotlight light-a"></div>
+            <div class="scene-spotlight light-b"></div>
+            <div class="scene-crowd crowd-left"></div>
+            <div class="scene-crowd crowd-right"></div>
+            <div class="scene-stage"></div>
+            <div class="scene-stage-rim"></div>
+            <div class="scene-card card-a">A♠</div>
+            <div class="scene-card card-k">K♥</div>
+            <div class="scene-chip-stack stack-left">
+              <i></i><i></i><i></i><i></i>
+            </div>
+            <div class="scene-chip-stack stack-right">
+              <i></i><i></i><i></i><i></i><i></i>
+            </div>
+            <div class="scene-light light-1"></div>
+            <div class="scene-light light-2"></div>
+          </div>
         </header>
 
         <div id="notice" class="notice hidden"></div>
@@ -227,16 +244,24 @@
               </div>
               <div id="seatMap" class="seat-map"></div>
               <div id="emoteLayer" class="emote-layer"></div>
+              <button id="socialLauncherBtn" class="social-launcher" aria-label="打开互动面板" title="互动">
+                <span class="icon">💬</span>
+                <span id="socialLauncherBadge" class="social-launcher-badge hidden">0</span>
+              </button>
               <section id="socialDock" class="social-dock collapsed">
                 <div class="social-head">
                   <strong>互动</strong>
                   <div class="social-head-actions">
                     <button id="socialSoundBtn" class="btn tiny ghost">音效:经典</button>
                     <button id="socialAnimBtn" class="btn tiny ghost">动画:开</button>
-                    <button id="socialCollapseBtn" class="btn tiny">展开</button>
+                    <button id="socialCollapseBtn" class="btn tiny">关闭</button>
                   </div>
                 </div>
                 <div id="socialBody" class="social-body">
+                  <div class="social-target-info">
+                    <span id="socialTargetHint">点击牌桌上的玩家卡片选择互动对象</span>
+                    <button id="clearSocialTargetBtn" class="btn tiny ghost hidden">清除目标</button>
+                  </div>
                   <div class="social-row">
                     <button class="btn tiny quick-emote-btn" data-emote-code="like">👍 点赞</button>
                     <button class="btn tiny quick-emote-btn" data-emote-code="laugh">😂 爆笑</button>
@@ -246,7 +271,6 @@
                     <button class="btn tiny quick-emote-btn" data-emote-code="heart">❤️ 比心</button>
                   </div>
                   <div class="social-row social-target-row">
-                    <select id="emoteTargetSelect"></select>
                     <button class="btn tiny prop-emote-btn" data-emote-code="egg">🥚 鸡蛋</button>
                     <button class="btn tiny prop-emote-btn" data-emote-code="flower">🌹 送花</button>
                     <button class="btn tiny prop-emote-btn" data-emote-code="water">💦 泼水</button>
@@ -259,7 +283,6 @@
                     <button id="counterBtn" class="btn tiny primary">反击</button>
                   </div>
                   <div class="social-chat-feed-wrap">
-                    <div id="socialUnreadBadge" class="social-unread hidden">0</div>
                     <div id="socialChatFeed" class="social-chat-feed"></div>
                   </div>
                   <div class="social-chat-input">
@@ -447,6 +470,16 @@
         </div>
       </section>
     </main>
+    <div id="rebuyModal" class="rebuy-modal hidden" role="dialog" aria-modal="true" aria-labelledby="rebuyModalTitle">
+      <div class="rebuy-modal-card">
+        <h3 id="rebuyModalTitle">筹码已打光</h3>
+        <p id="rebuyModalText">是否立即重新买入继续游戏？</p>
+        <div class="rebuy-modal-actions">
+          <button id="rebuyConfirmBtn" class="btn primary">重新买入并继续</button>
+          <button id="rebuyDeclineBtn" class="btn danger">不买入，离座观战</button>
+        </div>
+      </div>
+    </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="/client.js"></script>
