@@ -926,11 +926,11 @@ function advanceStreet(room) {
     return;
   }
 
-  const dealerIndex = game.order.indexOf(game.dealerId);
-  const firstActIndex = game.order.length === 2
-    ? nextEligibleFrom(game.order, game.order.indexOf(game.bigBlindId), (id) => eligibleToActInOrder(room, id))
-    : nextEligibleFrom(game.order, dealerIndex, (id) => eligibleToActInOrder(room, id));
-  assignPendingAndTurn(room, firstActIndex);
+  // User rule: postflop betting starts from small blind seat (or next eligible seat).
+  const smallBlindIndex = game.order.indexOf(game.smallBlindId);
+  const fallbackIndex = Math.max(0, game.order.indexOf(game.dealerId));
+  const startIndex = smallBlindIndex >= 0 ? smallBlindIndex : fallbackIndex;
+  assignPendingAndTurn(room, startIndex);
 }
 
 function completeActionAndAdvance(room, playerId) {
@@ -1450,6 +1450,9 @@ function serializeRoom(room, viewerId) {
     .sort((a, b) => a.seat - b.seat)
     .map((p) => {
       const showCards = viewerId === p.id || Boolean(resultRevealed[p.id]);
+      const visibleHoleCards = showCards
+        ? [...(Array.isArray(resultRevealed[p.id]) && resultRevealed[p.id].length ? resultRevealed[p.id] : p.holeCards)]
+        : [];
       return {
         id: p.id,
         name: p.name,
@@ -1465,7 +1468,7 @@ function serializeRoom(room, viewerId) {
         betThisStreet: p.betThisStreet,
         totalContribution: p.totalContribution,
         lastAction: p.lastAction,
-        holeCards: showCards ? [...p.holeCards] : [],
+        holeCards: visibleHoleCards,
       };
     });
 

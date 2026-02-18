@@ -1324,10 +1324,14 @@ function fmtClock(sec) {
   return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
 }
 
-function syncServerClock(serverNow) {
+function syncServerClock(serverNow, immediate = false) {
   const ts = Number(serverNow);
   if (!Number.isFinite(ts)) return;
   const targetOffset = ts - Date.now();
+  if (immediate) {
+    serverClockOffsetMs = targetOffset;
+    return;
+  }
   if (Math.abs(targetOffset - serverClockOffsetMs) > 5000) {
     serverClockOffsetMs = targetOffset;
     return;
@@ -3230,7 +3234,7 @@ socket.on('roomState', (state) => {
   trackPlayerActionCues(state);
   trackSeatJoinCue(state);
   roomState = state;
-  syncServerClock(state?.serverNow);
+  syncServerClock(state?.serverNow, true);
   renderRoom();
 });
 
