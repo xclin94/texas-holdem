@@ -39,9 +39,14 @@ let serverClockOffsetMs = 0;
 let seatPickMode = false;
 let audioCtx = null;
 let swipeStart = null;
+let trackedLastActionByPlayerId = new Map();
+let localActionCueEchoes = [];
+let pendingPotPushAnimation = null;
+let potPushCleanupTimer = null;
 
 const REQUEST_TIMEOUT_MS = 7000;
 const ACTION_PENDING_MS = 1200;
+const LOCAL_CUE_ECHO_MS = 1400;
 
 const $ = (id) => document.getElementById(id);
 
@@ -673,6 +678,100 @@ function playActionCue(kind) {
   playToneCue(kind);
 }
 
+function resetActionCueTracking() {
+  trackedLastActionByPlayerId = new Map();
+  localActionCueEchoes = [];
+}
+
+function normalizeActionText(v) {
+  return String(v || '').trim();
+}
+
+function detectActionCueKind(actionText) {
+  const text = normalizeActionText(actionText).toLowerCase();
+  if (!text) return null;
+  if (text.includes('放弃 straddle') || text.includes('跳过 straddle') || text.includes('skipstraddle')) return 'skipstraddle';
+  if (text.includes('straddle')) return 'straddle';
+  if (text.includes('过牌')) return 'check';
+  if (text.includes('弃牌')) return 'fold';
+  if (text.includes('跟注')) return 'call';
+  if (text.includes('全下')) return 'allin';
+  if (text.includes('加注')) return 'raise';
+  if (text.includes('下注')) return 'bet';
+  return null;
+}
+
+function pruneLocalCueEchoes(nowMs = Date.now()) {
+  if (!localActionCueEchoes.length) return;
+  localActionCueEchoes = localActionCueEchoes.filter((item) => item && item.expiresAt > nowMs);
+}
+
+function markLocalCueEcho(kind) {
+  const nowMs = Date.now();
+  pruneLocalCueEchoes(nowMs);
+  localActionCueEchoes.push({
+    kind,
+    expiresAt: nowMs + LOCAL_CUE_ECHO_MS,
+  });
+}
+
+function shouldSkipLocalEcho(kind) {
+  pruneLocalCueEchoes();
+  const idx = localActionCueEchoes.findIndex((item) => item.kind === kind);
+  if (idx < 0) return false;
+  localActionCueEchoes.splice(idx, 1);
+  return true;
+}
+
+function playLocalActionCue(kind) {
+  markLocalCueEcho(kind);
+  playActionCue(kind);
+}
+
+function trackPlayerActionCues(nextState) {
+  const players = nextState?.players || [];
+  if (!players.length) {
+    trackedLastActionByPlayerId.clear();
+    return;
+  }
+
+  if (trackedLastActionByPlayerId.size === 0) {
+    players.forEach((p) => {
+      trackedLastActionByPlayerId.set(p.id, normalizeActionText(p.lastAction));
+    });
+    return;
+  }
+
+  const changed = [];
+  const activeIds = new Set();
+
+  players.forEach((p) => {
+    activeIds.add(p.id);
+    const current = normalizeActionText(p.lastAction);
+    const previous = trackedLastActionByPlayerId.get(p.id) || '';
+    if (current && current !== previous) {
+      const kind = detectActionCueKind(current);
+      if (kind) changed.push({ playerId: p.id, kind });
+    }
+    trackedLastActionByPlayerId.set(p.id, current);
+  });
+
+  for (const id of [...trackedLastActionByPlayerId.keys()]) {
+    if (!activeIds.has(id)) trackedLastActionByPlayerId.delete(id);
+  }
+
+  if (!changed.length || el.tableView.classList.contains('hidden')) return;
+
+  changed.forEach((item, idx) => {
+    setTimeout(() => {
+      if (!uiSoundEnabled) return;
+      if (el.tableView.classList.contains('hidden')) return;
+      if (item.playerId === meId && shouldSkipLocalEcho(item.kind)) return;
+      playActionCue(item.kind);
+    }, Math.min(220, idx * 90));
+  });
+}
+
 function setActionPending(v) {
   actionPending = Boolean(v);
   if (actionPendingTimer) {
@@ -821,6 +920,113 @@ function setSeatPickMode(next, announce = true) {
 
 function roomMemberName(id) {
   return roomPlayerById(id)?.name || roomState?.spectators?.find((s) => s.id === id)?.name || '-';
+}
+
+function clearPotPushAnimationLayer() {
+  if (potPushCleanupTimer) {
+    clearTimeout(potPushCleanupTimer);
+    potPushCleanupTimer = null;
+  }
+  const layer = el.tableCanvas?.querySelector('.chip-push-layer');
+  if (layer) layer.remove();
+}
+
+function queuePotPushAnimation(handNo, result) {
+  pendingPotPushAnimation = {
+    handNo: Number(handNo) || 0,
+    result: result || null,
+  };
+}
+
+function runPotPushAnimation(payload) {
+  if (!payload || !el.tableCanvas || !el.seatMap) return;
+  if (uiMotionMode === 'reduced') return;
+  const winners = (payload.result?.winners || [])
+    .map((w) => ({
+      playerId: w?.playerId,
+      amount: Math.max(0, Number(w?.amount) || 0),
+    }))
+    .filter((w) => w.playerId && w.amount > 0);
+  if (!winners.length) return;
+
+  const potNode = el.tableCanvas.querySelector('.pot-center');
+  if (!potNode) return;
+
+  const tableRect = el.tableCanvas.getBoundingClientRect();
+  const potRect = potNode.getBoundingClientRect();
+  const startX = potRect.left + potRect.width / 2 - tableRect.left;
+  const startY = potRect.top + potRect.height / 2 - tableRect.top;
+
+  const targets = winners
+    .map((w) => {
+      const player = roomState?.players?.find((p) => p.id === w.playerId);
+      if (!player?.seat) return null;
+      const seatNode = el.seatMap.querySelector(`.seat-node[data-seat='${player.seat}']`);
+      if (!seatNode) return null;
+      const rect = seatNode.getBoundingClientRect();
+      return {
+        ...w,
+        endX: rect.left + rect.width / 2 - tableRect.left,
+        endY: rect.top + rect.height / 2 - tableRect.top,
+      };
+    })
+    .filter(Boolean);
+  if (!targets.length) return;
+
+  clearPotPushAnimationLayer();
+  const layer = document.createElement('div');
+  layer.className = 'chip-push-layer';
+  layer.setAttribute('aria-hidden', 'true');
+  el.tableCanvas.appendChild(layer);
+
+  const total = targets.reduce((sum, t) => sum + t.amount, 0) || 1;
+  let maxEndMs = 0;
+
+  targets.forEach((target, winnerIdx) => {
+    const tokenCount = Math.max(2, Math.min(10, Math.round(2 + (target.amount / total) * 8)));
+    for (let i = 0; i < tokenCount; i += 1) {
+      const chip = document.createElement('span');
+      chip.className = 'chip-push-token';
+      const delay = winnerIdx * 120 + i * 45;
+      const duration = 520 + Math.floor(Math.random() * 240);
+      const sx = startX + (Math.random() - 0.5) * 18;
+      const sy = startY + (Math.random() - 0.5) * 10;
+      const ex = target.endX + (Math.random() - 0.5) * 32;
+      const ey = target.endY + (Math.random() - 0.5) * 24;
+      chip.style.setProperty('--chip-sx', `${sx}px`);
+      chip.style.setProperty('--chip-sy', `${sy}px`);
+      chip.style.setProperty('--chip-ex', `${ex}px`);
+      chip.style.setProperty('--chip-ey', `${ey}px`);
+      chip.style.setProperty('--chip-delay', `${delay}ms`);
+      chip.style.setProperty('--chip-dur', `${duration}ms`);
+      layer.appendChild(chip);
+      maxEndMs = Math.max(maxEndMs, delay + duration);
+    }
+
+    const gain = document.createElement('div');
+    gain.className = 'chip-push-gain';
+    gain.textContent = `+${target.amount}`;
+    gain.style.setProperty('--gain-x', `${target.endX}px`);
+    gain.style.setProperty('--gain-y', `${target.endY}px`);
+    gain.style.setProperty('--gain-delay', `${winnerIdx * 120 + 220}ms`);
+    layer.appendChild(gain);
+    maxEndMs = Math.max(maxEndMs, winnerIdx * 120 + 900);
+  });
+
+  potPushCleanupTimer = setTimeout(() => {
+    layer.remove();
+    if (potPushCleanupTimer) {
+      clearTimeout(potPushCleanupTimer);
+      potPushCleanupTimer = null;
+    }
+  }, maxEndMs + 260);
+}
+
+function flushPendingPotPushAnimation() {
+  if (!pendingPotPushAnimation) return;
+  const payload = pendingPotPushAnimation;
+  pendingPotPushAnimation = null;
+  runPotPushAnimation(payload);
 }
 
 function suitSymbol(s) {
@@ -1832,7 +2038,7 @@ function tryAutoPreAction(actionState) {
   clearPreAction(false);
   renderPreActionBox(false);
   showHandBanner(`提前操作：自动${action === 'check' ? '过牌' : '弃牌'}`, 'ok', 1100);
-  playActionCue(action);
+  playLocalActionCue(action);
   sendPlayerAction({ action });
   return true;
 }
@@ -1968,6 +2174,7 @@ function renderStatus() {
     trackedResultHandNo = null;
     trackedSeatDealHandNo = null;
     trackedTurnCueToken = null;
+    pendingPotPushAnimation = null;
     raiseUiExpanded = false;
     clearPreAction(true);
   } else {
@@ -1987,6 +2194,7 @@ function renderStatus() {
       trackedResultHandNo = g.handNo;
       const firstWinner = g.result?.winners?.[0];
       showHandBanner(firstWinner ? `${firstWinner.name || roomMemberName(firstWinner.playerId)} 赢下本手` : '本手结束', 'ok', 2100);
+      queuePotPushAnimation(g.handNo, g.result);
     }
   }
 
@@ -2190,6 +2398,7 @@ function renderRoom() {
   renderStatus();
   renderCommunity();
   renderSeatMap();
+  flushPendingPotPushAnimation();
   renderSpectators();
   renderStats();
   renderBanned();
@@ -2264,6 +2473,7 @@ socket.on('connect', () => {
 socket.on('disconnect', () => {
   clearAllPending();
   setActionPending(false);
+  resetActionCueTracking();
   if (el.lobbyView.classList.contains('hidden')) {
     showNotice(el.tableNotice, '连接已断开，正在尝试重连...', 'error');
   } else {
@@ -2274,6 +2484,7 @@ socket.on('disconnect', () => {
 socket.on('connect_error', () => {
   clearAllPending();
   setActionPending(false);
+  resetActionCueTracking();
   if (el.lobbyView.classList.contains('hidden')) {
     showNotice(el.tableNotice, '连接失败，请检查网络后重试', 'error');
   } else {
@@ -2284,6 +2495,9 @@ socket.on('connect_error', () => {
 socket.on('joinedRoom', ({ playerId }) => {
   clearAllPending();
   setActionPending(false);
+  resetActionCueTracking();
+  clearPotPushAnimationLayer();
+  pendingPotPushAnimation = null;
   raiseUiExpanded = false;
   seatPickMode = false;
   clearPreAction(true);
@@ -2306,6 +2520,7 @@ socket.on('joinedRoom', ({ playerId }) => {
 
 socket.on('roomState', (state) => {
   setActionPending(false);
+  trackPlayerActionCues(state);
   roomState = state;
   syncServerClock(state?.serverNow);
   renderRoom();
@@ -2326,6 +2541,9 @@ socket.on('handReplayData', (replay) => {
 socket.on('kicked', (payload) => {
   clearAllPending();
   setActionPending(false);
+  resetActionCueTracking();
+  clearPotPushAnimationLayer();
+  pendingPotPushAnimation = null;
   raiseUiExpanded = false;
   seatPickMode = false;
   clearPreAction(true);
@@ -2505,6 +2723,9 @@ el.startBtn.addEventListener('click', () => socket.emit('startHand'));
 el.leaveBtn.addEventListener('click', () => {
   clearAllPending();
   setActionPending(false);
+  resetActionCueTracking();
+  clearPotPushAnimationLayer();
+  pendingPotPushAnimation = null;
   raiseUiExpanded = false;
   seatPickMode = false;
   clearPreAction(true);
@@ -2544,26 +2765,26 @@ el.copyRoomBtn.addEventListener('click', async () => {
 
 el.foldBtn.addEventListener('click', () => {
   raiseUiExpanded = false;
-  playActionCue('fold');
+  playLocalActionCue('fold');
   sendPlayerAction({ action: 'fold' });
 });
 el.checkBtn.addEventListener('click', () => {
   const actionState = roomState?.actionState;
   if (!actionState || !(actionState.canCheck && actionState.toCall === 0)) return;
   raiseUiExpanded = false;
-  playActionCue('check');
+  playLocalActionCue('check');
   sendPlayerAction({ action: 'check' });
 });
 el.callBtn.addEventListener('click', () => {
   const actionState = roomState?.actionState;
   if (!actionState || !(actionState.canCall && actionState.toCall > 0)) return;
   raiseUiExpanded = false;
-  playActionCue('call');
+  playLocalActionCue('call');
   sendPlayerAction({ action: 'call' });
 });
 el.allinBtn.addEventListener('click', () => {
   raiseUiExpanded = false;
-  playActionCue('allin');
+  playLocalActionCue('allin');
   sendPlayerAction({ action: 'allin' });
 });
 
@@ -2578,7 +2799,7 @@ el.betBtn.addEventListener('click', () => {
   const amount = parseNum(el.betRangeInput.value || el.betInput.value, 0);
   const action = actionState.canBet ? 'bet' : 'raise';
   raiseUiExpanded = false;
-  playActionCue(action);
+  playLocalActionCue(action);
   sendPlayerAction({ action, amount });
 });
 
@@ -2595,7 +2816,7 @@ quickRaiseButtons.forEach((btn) => {
     updateBetRange(roomState.actionState, target);
     const action = roomState.actionState.canBet ? 'bet' : 'raise';
     raiseUiExpanded = false;
-    playActionCue(action);
+    playLocalActionCue(action);
     sendPlayerAction({ action, amount: target });
   });
 });
@@ -2638,12 +2859,12 @@ el.preActionClearBtn.addEventListener('click', () => {
 
 el.straddleBtn.addEventListener('click', () => {
   const amount = parseNum(el.straddleInput.value, 0);
-  playActionCue('straddle');
+  playLocalActionCue('straddle');
   sendPlayerAction({ action: 'straddle', amount });
 });
 
 el.skipStraddleBtn.addEventListener('click', () => {
-  playActionCue('skipstraddle');
+  playLocalActionCue('skipstraddle');
   sendPlayerAction({ action: 'skipstraddle' });
 });
 
