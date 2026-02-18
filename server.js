@@ -4,7 +4,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 
 const PORT = Number(process.env.HOLDEM_PORT || 3000);
-const AUTO_NEXT_HAND_DELAY_MS = 2000;
+const AUTO_NEXT_HAND_DELAY_MS = 5500;
 const EMOTE_LIMIT_WINDOW_MS = 60 * 1000;
 const EMOTE_LIMIT_COUNT = 20;
 const EMOTE_MIN_INTERVAL_MS = 350;
@@ -410,7 +410,6 @@ function roomCanStart(room) {
 function scheduleAutoNextHand(room) {
   clearAutoStartTimer(room);
   if (!room || !room.game || !room.game.finished) return;
-  if (!roomCanStart(room)) return;
 
   room.autoStartAt = Date.now() + AUTO_NEXT_HAND_DELAY_MS;
   room.autoStartTimer = setTimeout(() => {
@@ -418,18 +417,44 @@ function scheduleAutoNextHand(room) {
     room.autoStartAt = null;
     if (!rooms.has(room.id)) return;
     if (!room.game || !room.game.finished) return;
-    if (!roomCanStart(room)) return;
+    if (!roomCanStart(room)) {
+      scheduleAutoNextHand(room);
+      broadcastRoom(room);
+      return;
+    }
 
     if (!getPlayer(room, room.hostId)) {
       room.hostId = room.players[0]?.id || room.hostId;
     }
     const requestedBy = room.hostId;
     const r = startHand(room, requestedBy);
-    if (!r.ok) return;
+    if (!r.ok) {
+      scheduleAutoNextHand(room);
+      broadcastRoom(room);
+      return;
+    }
     logRoom(room, '自动开始下一手');
     broadcastRoom(room);
     broadcastLobby();
   }, AUTO_NEXT_HAND_DELAY_MS);
+}
+
+function tryAutoStartNow(room, reason = '') {
+  if (!room || !room.game || !room.game.finished) return false;
+  if (!roomCanStart(room)) return false;
+  clearAutoStartTimer(room);
+
+  if (!getPlayer(room, room.hostId)) {
+    room.hostId = room.players[0]?.id || room.hostId;
+  }
+  const requestedBy = room.hostId;
+  const r = startHand(room, requestedBy);
+  if (!r.ok) {
+    scheduleAutoNextHand(room);
+    return false;
+  }
+  logRoom(room, reason ? `自动开始下一手（${reason}）` : '自动开始下一手');
+  return true;
 }
 
 function createDeck() {
@@ -1315,6 +1340,7 @@ function startHand(room, requestedBy) {
     straddleAmount: 0,
     archived: false,
   };
+  room.hasStartedOnce = true;
   handCounter += 1;
 
   participants.forEach((p) => {
@@ -1541,6 +1567,7 @@ function serializeRoom(room, viewerId) {
     sessionRemainSec: secondsLeft(room.sessionEndsAt),
     autoStartAt: room.autoStartAt || null,
     autoStartDelayMs: AUTO_NEXT_HAND_DELAY_MS,
+    hasStartedOnce: Boolean(room.hasStartedOnce),
     players,
     spectators,
     logs: room.logs.slice(-80),
@@ -1818,6 +1845,7 @@ io.on('connection', (socket) => {
       turnTimer: null,
       autoStartTimer: null,
       autoStartAt: null,
+      hasStartedOnce: false,
       handHistory: [],
       bannedNames: new Set(),
       emoteRateState: new Map(),
@@ -1878,6 +1906,12 @@ io.on('connection', (socket) => {
     }
 
     logRoom(room, `${name} ${joined.role === 'spectator' ? '加入了观战' : '加入了房间'}`);
+    if (joined.role === 'player' && room.game?.finished) {
+      tryAutoStartNow(room, '玩家加入');
+      if (room.game?.finished) {
+        scheduleAutoNextHand(room);
+      }
+    }
     socket.emit('joinedRoom', { roomId, playerId: socket.id, role: joined.role });
     broadcastRoom(room);
     broadcastLobby();
@@ -1913,6 +1947,12 @@ io.on('connection', (socket) => {
     socket.data.role = 'player';
     logRoom(room, `${player.name} 入座到 ${seat} 号位`);
     reassignHost(room);
+    if (room.game?.finished) {
+      tryAutoStartNow(room, '玩家入座');
+      if (room.game?.finished) {
+        scheduleAutoNextHand(room);
+      }
+    }
     broadcastRoom(room);
     broadcastLobby();
   });
@@ -2039,6 +2079,14 @@ io.on('connection', (socket) => {
 
     player.ready = !player.ready;
     logRoom(room, `${player.name} ${player.ready ? '已准备' : '取消准备'}`);
+    if (room.game?.finished) {
+      if (player.ready) {
+        tryAutoStartNow(room, '玩家准备');
+      }
+      if (room.game?.finished) {
+        scheduleAutoNextHand(room);
+      }
+    }
     broadcastRoom(room);
     broadcastLobby();
   });
@@ -2059,6 +2107,12 @@ io.on('connection', (socket) => {
       return;
     }
 
+    if (room.game?.finished) {
+      tryAutoStartNow(room, '玩家重新买入');
+      if (room.game?.finished) {
+        scheduleAutoNextHand(room);
+      }
+    }
     broadcastRoom(room);
     broadcastLobby();
   });

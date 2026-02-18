@@ -284,7 +284,7 @@ test('all-in showdown reveals cards in serialized players', async (t) => {
   assert.equal(Array.isArray(guestPlayer?.holeCards) && guestPlayer.holeCards.length === 2, true);
 });
 
-test('auto next hand countdown uses 2 seconds and starts automatically', async (t) => {
+test('auto next hand countdown waits for result animations then starts automatically', async (t) => {
   const { sockets } = await setupPlayers(t, 3, { allowStraddle: false });
   const [host] = sockets;
   const byId = socketById(sockets);
@@ -314,15 +314,72 @@ test('auto next hand countdown uses 2 seconds and starts automatically', async (
     (next) => next?.game?.handNo === handNo && next.game.finished && Boolean(next.autoStartAt),
   );
 
-  assert.equal(state.autoStartDelayMs, 2000);
+  assert.equal(state.autoStartDelayMs, 5500);
   const deltaMs = Number(state.autoStartAt) - Number(state.serverNow);
-  assert.equal(deltaMs > 1000 && deltaMs <= 2400, true);
+  assert.equal(deltaMs > 4500 && deltaMs <= 5900, true);
 
   const nextHand = await waitForEvent(
     host,
     'roomState',
     (next) => next?.game && !next.game.finished && next.game.handNo === handNo + 1,
+    EVENT_TIMEOUT_MS + 7000,
+  );
+  assert.equal(nextHand.game.handNo, handNo + 1);
+});
+
+test('finished table keeps auto countdown with one player and restarts immediately when another sits', async (t) => {
+  const { roomId, sockets } = await setupPlayers(t, 2, { allowStraddle: false });
+  const [host, guest] = sockets;
+  const byId = socketById(sockets);
+
+  const started = waitForEvent(
+    host,
+    'roomState',
+    (state) => state?.game && !state.game.finished && state.game.phase === 'preflop' && Boolean(state.game.turnId),
+  );
+  host.emit('startHand');
+  let state = await started;
+  const handNo = state.game.handNo;
+
+  byId.get(state.game.turnId).emit('playerAction', { action: 'fold' });
+  state = await waitForEvent(
+    host,
+    'roomState',
+    (next) => next?.game?.handNo === handNo && next.game.finished && Boolean(next.autoStartAt),
+  );
+  const firstAutoStartAt = Number(state.autoStartAt);
+  assert.equal(state.players.length, 2);
+
+  guest.emit('leaveRoom');
+  state = await waitForEvent(
+    host,
+    'roomState',
+    (next) => next?.game?.handNo === handNo && next.game.finished && next.players?.length === 1 && Boolean(next.autoStartAt),
+    EVENT_TIMEOUT_MS + 2000,
+  );
+
+  const rolled = await waitForEvent(
+    host,
+    'roomState',
+    (next) =>
+      next?.game?.handNo === handNo &&
+      next.game.finished &&
+      next.players?.length === 1 &&
+      Boolean(next.autoStartAt) &&
+      Number(next.autoStartAt) > firstAutoStartAt,
+    EVENT_TIMEOUT_MS + 7000,
+  );
+  assert.equal(Boolean(rolled.autoStartAt), true);
+
+  const newcomer = await connectClient();
+  t.after(() => closeSocket(newcomer));
+  const nextHandPromise = waitForEvent(
+    host,
+    'roomState',
+    (next) => next?.game && !next.game.finished && next.game.handNo === handNo + 1,
     EVENT_TIMEOUT_MS + 3000,
   );
+  await joinRoomAs(newcomer, roomId, `Late-${Date.now().toString(36).slice(-4)}`);
+  const nextHand = await nextHandPromise;
   assert.equal(nextHand.game.handNo, handNo + 1);
 });

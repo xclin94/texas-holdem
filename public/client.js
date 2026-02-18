@@ -1976,22 +1976,14 @@ function renderSeatMap() {
     if (p.allIn) pushBadge('全下');
     if (!p.connected) pushBadge('离线', 'warn');
 
-    const sub = document.createElement('div');
-    sub.className = 'seat-sub';
     const displayStack = displayStackForPlayer(p);
     const displayStreetBet = displayStreetBetForPlayer(p);
-    if (compact) {
-      const stackText = compactStackText(displayStack);
-      const action = !narrowMobile && p.lastAction ? ` · ${p.lastAction}` : '';
-      sub.textContent = `后手 ${stackText}${action}`;
+    const actionLine = document.createElement('div');
+    actionLine.className = 'seat-sub';
+    if (p.lastAction) {
+      actionLine.textContent = p.lastAction;
     } else {
-      sub.textContent = `后手 ${displayStack} · 本轮 ${displayStreetBet} · 总投入 ${p.totalContribution}`;
-    }
-
-    const act = !compact ? document.createElement('div') : null;
-    if (act) {
-      act.className = 'seat-sub';
-      act.textContent = p.lastAction || '等待中';
+      actionLine.textContent = compact ? '等待' : '等待中';
     }
 
     const streetBet = Math.max(0, Number(displayStreetBet) || 0);
@@ -2026,8 +2018,7 @@ function renderSeatMap() {
     }
     node.appendChild(betChip);
     node.appendChild(stackVisual);
-    node.appendChild(sub);
-    if (act) node.appendChild(act);
+    node.appendChild(actionLine);
     if (cards.children.length > 0) {
       node.appendChild(cards);
     }
@@ -2404,25 +2395,17 @@ function renderResult() {
   const side = (result?.sidePots || [])
     .map((p, idx) => `边池${idx + 1}: ${p.amount} -> ${(p.winners || []).map((id) => roomMemberName(id)).join('/')} ${p.handName ? `(${p.handName})` : ''}`)
     .join('<br/>');
-  const canContinue = Boolean(roomState?.canStart);
   const autoStartSec = roomState?.autoStartAt ? Math.max(0, Math.ceil((roomState.autoStartAt - nowByServer()) / 1000)) : 0;
   const autoStartDelayMs = Math.max(800, Number(roomState?.autoStartDelayMs || 2000));
   const autoStartRemainMs = roomState?.autoStartAt ? Math.max(0, roomState.autoStartAt - nowByServer()) : 0;
   const autoStartPct = Math.max(0, Math.min(100, Math.round((autoStartRemainMs / autoStartDelayMs) * 100)));
-  const iAmHost = roomState?.hostId === meId;
   const cta = autoStartSec > 0
     ? `<div class="auto-next"><p class="hint">下一手将在 ${autoStartSec}s 后自动开始</p><div class="auto-next-bar"><i style="width:${autoStartPct}%"></i></div></div>`
-    : canContinue
-      ? iAmHost
-        ? '<button id="nextHandBtn" class="btn primary">立即开始下一手</button>'
-        : '<p class="hint">等待房主开始下一手</p>'
-      : '<p class="hint">至少需要 2 名已准备玩家才能继续</p>';
+    : roomState?.canStart
+      ? '<p class="hint">正在等待自动开局...</p>'
+      : '<p class="hint">等待玩家入座（达到 2 人将自动开局）</p>';
   el.resultPanel.classList.remove('hidden');
   el.resultPanel.innerHTML = `<h3>本手结算</h3><div class="result-winners">${winnerHtml}</div><p class="hint">${side || '本手无边池分配'}</p><div class="result-cta">${cta}</div>`;
-  const nextHandBtn = $('nextHandBtn');
-  if (nextHandBtn) {
-    nextHandBtn.onclick = () => socket.emit('startHand');
-  }
 }
 
 function calcQuickRaiseTarget(actionState, ratio) {
@@ -2811,10 +2794,9 @@ function renderStatus() {
   if (!canChangeSeatNow) seatPickMode = false;
 
   el.readyBtn.disabled = !isPlayer;
-  const waitingAuto = Boolean(g?.finished && autoStartSec > 0);
-  el.startBtn.disabled = waitingAuto || !(roomState.canStart && isHost && isPlayer);
+  el.startBtn.disabled = !(roomState.canStart && isHost && isPlayer);
   el.startBtn.textContent = '开局';
-  const showCenterStart = Boolean(isHost && (!g || g.finished));
+  const showCenterStart = Boolean(!roomState?.hasStartedOnce && isHost && (!g || g.finished));
   el.startBtn.classList.toggle('hidden', !showCenterStart);
 
   el.takeSeatBtn.classList.toggle('hidden', !roomState.canTakeSeat);
@@ -2875,11 +2857,11 @@ function renderStatus() {
       tableTip = `本手结束，${autoStartSec}s 后自动开始下一手。`;
       tipTone = 'ok';
     } else if (roomState.canStart) {
-      tableTip = isHost ? '本手结束，可立即开始下一手。' : '本手结束，等待房主开始下一手。';
+      tableTip = '本手结束，正在等待自动开局...';
       tipTone = 'ok';
     } else {
-      tableTip = '本手结束，至少 2 名已准备玩家才能继续。';
-      tipTone = 'error';
+      tableTip = '本手结束，等待玩家入座（达到 2 人将自动开局）';
+      tipTone = 'info';
     }
   }
   showNotice(el.tableNotice, tableTip, tipTone);
@@ -3232,7 +3214,8 @@ function spawnPropEmote(event) {
   if ((event.combo || 1) >= 3) impact.classList.add('combo');
   impact.style.setProperty('--ix', `${to.x}px`);
   impact.style.setProperty('--iy', `${to.y}px`);
-  impact.innerHTML = `<span>${emoteEmoji(event.kind, event.code)}</span><small>${emoteLabel(event.kind, event.code)}${(event.combo || 1) > 1 ? ` x${event.combo}` : ''}</small>`;
+  const comboSuffix = (event.combo || 1) > 1 ? `<small>x${event.combo}</small>` : '';
+  impact.innerHTML = `<span>${emoteEmoji(event.kind, event.code)}</span>${comboSuffix}`;
   impact.style.animationDelay = '360ms';
   el.emoteLayer.appendChild(impact);
 
@@ -3270,7 +3253,7 @@ function handleIncomingEmote(event) {
       expiresAt: Date.now() + 5200,
     };
     if (el.counterText) {
-      el.counterText.textContent = `${event.fromName || roomMemberName(event.fromId)} 对你使用了 ${emoteLabel(event.kind, event.code)}，要反击吗？`;
+      el.counterText.textContent = `${event.fromName || roomMemberName(event.fromId)} 对你使用了 ${emoteEmoji(event.kind, event.code)}，要反击吗？`;
     }
     if (el.counterRow) {
       el.counterRow.classList.remove('hidden');
