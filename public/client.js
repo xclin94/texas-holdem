@@ -23,6 +23,11 @@ let uiActionPanelCollapsed = localStorage.getItem('holdem_action_collapsed')
 let uiMotionMode = localStorage.getItem('holdem_motion_mode') || 'full';
 let uiProfitFilter = localStorage.getItem('holdem_profit_filter') || 'all';
 let uiSideTab = localStorage.getItem('holdem_side_tab') || 'chips';
+let uiSocialAnimEnabled = localStorage.getItem('holdem_social_anim') !== '0';
+let uiEmoteSoundPack = localStorage.getItem('holdem_emote_sound') || 'classic';
+let uiSocialCollapsed = localStorage.getItem('holdem_social_collapsed')
+  ? localStorage.getItem('holdem_social_collapsed') === '1'
+  : true;
 let bannerTimer = null;
 let trackedHandNo = null;
 let trackedPhase = null;
@@ -52,6 +57,10 @@ let cappuccinoCleanupTimer = null;
 let trackedCappuccinoHandNo = null;
 let trackedSeatedPlayerIds = new Set();
 let seatJoinCueKnown = false;
+let socialUnreadCount = 0;
+let socialSeenChatCount = 0;
+let socialCounterState = null;
+let socialCounterTimer = null;
 
 const REQUEST_TIMEOUT_MS = 7000;
 const ACTION_PENDING_MS = 1200;
@@ -198,9 +207,25 @@ const el = {
   logs: $('logs'),
   chatInput: $('chatInput'),
   sendChatBtn: $('sendChatBtn'),
+  emoteLayer: $('emoteLayer'),
+  socialDock: $('socialDock'),
+  socialBody: $('socialBody'),
+  socialCollapseBtn: $('socialCollapseBtn'),
+  socialSoundBtn: $('socialSoundBtn'),
+  socialAnimBtn: $('socialAnimBtn'),
+  emoteTargetSelect: $('emoteTargetSelect'),
+  counterRow: $('counterRow'),
+  counterText: $('counterText'),
+  counterBtn: $('counterBtn'),
+  socialUnreadBadge: $('socialUnreadBadge'),
+  socialChatFeed: $('socialChatFeed'),
+  socialChatInput: $('socialChatInput'),
+  socialChatSendBtn: $('socialChatSendBtn'),
 };
 
 const quickRaiseButtons = Array.from(document.querySelectorAll('.quick-raise-btn'));
+const quickEmoteButtons = Array.from(document.querySelectorAll('.quick-emote-btn'));
+const propEmoteButtons = Array.from(document.querySelectorAll('.prop-emote-btn'));
 const sideTabButtons = Array.from(document.querySelectorAll('.side-tab-btn'));
 const sidePanes = Array.from(document.querySelectorAll('.side-pane'));
 const THEME_CYCLE = ['forest', 'ocean', 'sunset'];
@@ -217,6 +242,28 @@ const quickRaiseLabelMap = {
   '1.5': '1.5池',
   '2': '2池',
 };
+const QUICK_EMOTE_META = {
+  like: { label: '点赞', emoji: '👍' },
+  laugh: { label: '爆笑', emoji: '😂' },
+  wow: { label: '惊了', emoji: '😮' },
+  cry: { label: '哭了', emoji: '😭' },
+  '666': { label: '666', emoji: '🔥' },
+  heart: { label: '比心', emoji: '❤️' },
+};
+const PROP_EMOTE_META = {
+  egg: { label: '鸡蛋', emoji: '🥚' },
+  flower: { label: '送花', emoji: '🌹' },
+  water: { label: '泼水', emoji: '💦' },
+  rocket: { label: '火箭', emoji: '🚀' },
+  kiss: { label: '飞吻', emoji: '😘' },
+  tomato: { label: '番茄', emoji: '🍅' },
+};
+const EMOTE_SOUND_PACK_LABEL = {
+  off: '关',
+  classic: '经典',
+  fun: '欢乐',
+};
+const EMOTE_SOUND_PACK_CYCLE = ['classic', 'fun', 'off'];
 const ACTION_VOICE_SRC = {
   check: '/audio/check-zh.mp3',
   call: '/audio/call-zh.mp3',
@@ -2718,6 +2765,318 @@ function renderLogs() {
   }
 }
 
+function clearSocialCounter() {
+  if (socialCounterTimer) {
+    clearTimeout(socialCounterTimer);
+    socialCounterTimer = null;
+  }
+  socialCounterState = null;
+  if (el.counterRow) {
+    el.counterRow.classList.add('hidden');
+  }
+}
+
+function resetSocialState() {
+  socialUnreadCount = 0;
+  socialSeenChatCount = 0;
+  clearSocialCounter();
+  if (el.emoteLayer) el.emoteLayer.innerHTML = '';
+  if (el.socialUnreadBadge) {
+    el.socialUnreadBadge.classList.add('hidden');
+    el.socialUnreadBadge.textContent = '0';
+  }
+}
+
+function normalizeEmoteSoundPack(v) {
+  if (v === 'off' || v === 'classic' || v === 'fun') return v;
+  return 'classic';
+}
+
+function refreshSocialButtons() {
+  if (el.socialSoundBtn) {
+    el.socialSoundBtn.textContent = `音效:${EMOTE_SOUND_PACK_LABEL[uiEmoteSoundPack] || '经典'}`;
+  }
+  if (el.socialAnimBtn) {
+    el.socialAnimBtn.textContent = `动画:${uiSocialAnimEnabled ? '开' : '关'}`;
+  }
+  if (el.socialCollapseBtn) {
+    el.socialCollapseBtn.textContent = uiSocialCollapsed ? '展开' : '收起';
+  }
+}
+
+function refreshSocialUnreadBadge() {
+  if (!el.socialUnreadBadge) return;
+  if (!socialUnreadCount || !uiSocialCollapsed) {
+    el.socialUnreadBadge.classList.add('hidden');
+    el.socialUnreadBadge.textContent = '0';
+    return;
+  }
+  el.socialUnreadBadge.classList.remove('hidden');
+  el.socialUnreadBadge.textContent = String(Math.min(99, socialUnreadCount));
+}
+
+function applySocialDockState(persist = false) {
+  if (!el.socialDock) return;
+  el.socialDock.classList.toggle('collapsed', uiSocialCollapsed);
+  if (!uiSocialCollapsed) socialUnreadCount = 0;
+  refreshSocialUnreadBadge();
+  refreshSocialButtons();
+  if (persist) {
+    localStorage.setItem('holdem_social_collapsed', uiSocialCollapsed ? '1' : '0');
+  }
+}
+
+function emoteLabel(kind, code) {
+  if (kind === 'quick') return QUICK_EMOTE_META[code]?.label || code;
+  return PROP_EMOTE_META[code]?.label || code;
+}
+
+function emoteEmoji(kind, code) {
+  if (kind === 'quick') return QUICK_EMOTE_META[code]?.emoji || '✨';
+  return PROP_EMOTE_META[code]?.emoji || '🎯';
+}
+
+function playEmoteCue(event) {
+  if (!uiSoundEnabled) return;
+  const pack = normalizeEmoteSoundPack(uiEmoteSoundPack);
+  if (pack === 'off') return;
+  const AudioCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtor) return;
+  try {
+    if (!audioCtx || audioCtx.state === 'closed') {
+      audioCtx = new AudioCtor();
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {});
+    }
+    const now = audioCtx.currentTime;
+    const combo = Math.max(1, Number(event?.combo) || 1);
+    const kind = String(event?.kind || '');
+    const base = pack === 'fun' ? (kind === 'prop' ? 640 : 560) : kind === 'prop' ? 520 : 460;
+    const high = base + 120 + Math.min(4, combo) * 45;
+    const toneCount = pack === 'fun' ? 3 : 2;
+    for (let i = 0; i < toneCount; i += 1) {
+      const start = now + i * 0.045;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = pack === 'fun' ? 'triangle' : 'sine';
+      const from = i === 0 ? base : base + 40 * i;
+      const to = i === toneCount - 1 ? high : from + 55;
+      osc.frequency.setValueAtTime(from, start);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(100, to), start + 0.08);
+      gain.gain.setValueAtTime(0.001, start);
+      gain.gain.exponentialRampToValueAtTime(0.09 + Math.min(0.07, combo * 0.01), start + 0.018);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.1);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(start);
+      osc.stop(start + 0.11);
+    }
+  } catch {
+    // Ignore device/autoplay limitations.
+  }
+}
+
+function memberPointOnTable(memberId) {
+  if (!memberId || !el.tableCanvas || !el.seatMap) return null;
+  const tableRect = el.tableCanvas.getBoundingClientRect();
+  const player = roomState?.players?.find((p) => p.id === memberId);
+  if (player?.seat) {
+    const node = el.seatMap.querySelector(`.seat-node[data-seat='${player.seat}']`);
+    if (node) {
+      const rect = node.getBoundingClientRect();
+      return {
+        x: rect.left + rect.width / 2 - tableRect.left,
+        y: rect.top + rect.height / 2 - tableRect.top,
+      };
+    }
+  }
+
+  const spectators = roomState?.spectators || [];
+  const idx = spectators.findIndex((s) => s.id === memberId);
+  if (idx >= 0) {
+    return {
+      x: Math.max(44, tableRect.width - 48),
+      y: Math.min(tableRect.height - 44, 66 + idx * 26),
+    };
+  }
+
+  return {
+    x: tableRect.width * 0.5,
+    y: 64,
+  };
+}
+
+function spawnQuickEmoteBubble(event) {
+  if (!el.emoteLayer) return;
+  const from = memberPointOnTable(event.fromId);
+  if (!from) return;
+  const node = document.createElement('div');
+  node.className = 'emote-bubble';
+  if ((event.combo || 1) > 1) node.classList.add('combo');
+  node.style.setProperty('--bx', `${from.x}px`);
+  node.style.setProperty('--by', `${from.y}px`);
+  const emo = document.createElement('span');
+  emo.className = 'emo';
+  emo.textContent = emoteEmoji(event.kind, event.code);
+  const who = document.createElement('small');
+  who.textContent = event.fromName || roomMemberName(event.fromId);
+  node.appendChild(emo);
+  node.appendChild(who);
+  if ((event.combo || 1) > 1) {
+    const combo = document.createElement('b');
+    combo.className = 'emote-combo-tag';
+    combo.textContent = `x${event.combo}`;
+    node.appendChild(combo);
+  }
+  el.emoteLayer.appendChild(node);
+  setTimeout(() => node.remove(), 1700);
+}
+
+function spawnPropEmote(event) {
+  if (!el.emoteLayer) return;
+  const from = memberPointOnTable(event.fromId);
+  const to = memberPointOnTable(event.targetId);
+  if (!from || !to) return;
+
+  const shot = document.createElement('div');
+  shot.className = `emote-shot${event.counter ? ' counter' : ''}${(event.combo || 1) >= 3 ? ' combo' : ''}`;
+  shot.style.setProperty('--sx', `${from.x}px`);
+  shot.style.setProperty('--sy', `${from.y}px`);
+  shot.style.setProperty('--tx', `${to.x}px`);
+  shot.style.setProperty('--ty', `${to.y}px`);
+  shot.textContent = emoteEmoji(event.kind, event.code);
+  el.emoteLayer.appendChild(shot);
+
+  const impact = document.createElement('div');
+  impact.className = 'emote-impact';
+  if ((event.combo || 1) >= 3) impact.classList.add('combo');
+  impact.style.setProperty('--ix', `${to.x}px`);
+  impact.style.setProperty('--iy', `${to.y}px`);
+  impact.innerHTML = `<span>${emoteEmoji(event.kind, event.code)}</span><small>${emoteLabel(event.kind, event.code)}${(event.combo || 1) > 1 ? ` x${event.combo}` : ''}</small>`;
+  impact.style.animationDelay = '360ms';
+  el.emoteLayer.appendChild(impact);
+
+  setTimeout(() => shot.remove(), 950);
+  setTimeout(() => impact.remove(), 1650);
+}
+
+function handleIncomingEmote(event) {
+  if (!event || !roomState) return;
+  if (event.roomId && event.roomId !== roomState.roomId) return;
+  playEmoteCue(event);
+  if (uiSocialAnimEnabled) {
+    if (event.kind === 'prop' && event.targetId) spawnPropEmote(event);
+    else spawnQuickEmoteBubble(event);
+  }
+  if (event.kind === 'prop' && event.targetId === meId && event.fromId !== meId) {
+    socialCounterState = {
+      fromId: event.fromId,
+      code: event.code,
+      expiresAt: Date.now() + 5200,
+    };
+    if (el.counterText) {
+      el.counterText.textContent = `${event.fromName || roomMemberName(event.fromId)} 对你使用了 ${emoteLabel(event.kind, event.code)}，要反击吗？`;
+    }
+    if (el.counterRow) {
+      el.counterRow.classList.remove('hidden');
+    }
+    if (socialCounterTimer) clearTimeout(socialCounterTimer);
+    socialCounterTimer = setTimeout(() => {
+      clearSocialCounter();
+    }, 5200);
+  }
+}
+
+function refreshEmoteTargetOptions() {
+  if (!el.emoteTargetSelect) return;
+  const prev = el.emoteTargetSelect.value;
+  const players = (roomState?.players || []).filter((p) => p.id !== meId);
+  el.emoteTargetSelect.innerHTML = '';
+  const empty = document.createElement('option');
+  empty.value = '';
+  empty.textContent = players.length ? '选择目标玩家' : '暂无可互动目标';
+  el.emoteTargetSelect.appendChild(empty);
+  players.forEach((p) => {
+    const op = document.createElement('option');
+    op.value = p.id;
+    op.textContent = `${p.name} · 座位${p.seat}`;
+    el.emoteTargetSelect.appendChild(op);
+  });
+  if (players.some((p) => p.id === prev)) {
+    el.emoteTargetSelect.value = prev;
+  }
+
+  const targetable = Boolean(el.emoteTargetSelect.value);
+  propEmoteButtons.forEach((btn) => {
+    btn.disabled = !targetable;
+  });
+}
+
+function syncPropEmoteButtons() {
+  const targetable = Boolean(el.emoteTargetSelect?.value);
+  propEmoteButtons.forEach((btn) => {
+    btn.disabled = !targetable;
+  });
+}
+
+function sendEmote(kind, code, targetId = '', counter = false) {
+  if (!roomState || !ensureConnected()) return;
+  const payload = {
+    kind,
+    code,
+  };
+  if (targetId) payload.targetId = targetId;
+  if (counter) payload.counter = true;
+  socket.emit('sendEmote', payload);
+}
+
+function sendSocialChatMessage(rawMessage) {
+  if (!roomState || !ensureConnected()) return false;
+  const message = String(rawMessage || '').trim().slice(0, 120);
+  if (!message) return false;
+  socket.emit('chatMessage', { message });
+  return true;
+}
+
+function socialChatItemsFromLogs() {
+  const lines = roomState?.logs || [];
+  return lines
+    .map((line) => parseLogLine(line))
+    .filter((item) => item.kind === 'chat');
+}
+
+function renderSocialChatFeed() {
+  if (!el.socialChatFeed) return;
+  const chats = socialChatItemsFromLogs();
+  if (chats.length > socialSeenChatCount) {
+    const delta = chats.length - socialSeenChatCount;
+    if (uiSocialCollapsed) socialUnreadCount += delta;
+  }
+  socialSeenChatCount = chats.length;
+  if (!uiSocialCollapsed) socialUnreadCount = 0;
+  refreshSocialUnreadBadge();
+
+  const nearBottom = el.socialChatFeed.scrollHeight - el.socialChatFeed.scrollTop - el.socialChatFeed.clientHeight < 24;
+  el.socialChatFeed.innerHTML = '';
+  chats.slice(-28).forEach((item) => {
+    const row = document.createElement('div');
+    row.className = `mini-chat-item${item.sender === myDisplayName() ? ' mine' : ''}`;
+    const who = document.createElement('span');
+    who.className = 'who';
+    who.textContent = `${item.sender}${item.spectatorTag || ''}`;
+    const msg = document.createElement('span');
+    msg.className = 'msg';
+    msg.textContent = item.message || '';
+    row.appendChild(who);
+    row.appendChild(msg);
+    el.socialChatFeed.appendChild(row);
+  });
+  if (nearBottom) {
+    el.socialChatFeed.scrollTop = el.socialChatFeed.scrollHeight;
+  }
+}
+
 function renderRoom() {
   if (!roomState) return;
   renderStatus();
@@ -2734,6 +3093,8 @@ function renderRoom() {
   renderActions();
   renderResult();
   renderLogs();
+  refreshEmoteTargetOptions();
+  renderSocialChatFeed();
   renderProfitChart();
 }
 
@@ -2807,6 +3168,7 @@ socket.on('disconnect', () => {
   clearCappuccinoCelebration();
   pendingCappuccinoCelebration = null;
   trackedCappuccinoHandNo = null;
+  resetSocialState();
   if (el.lobbyView.classList.contains('hidden')) {
     showNotice(el.tableNotice, '连接已断开，正在尝试重连...', 'error');
   } else {
@@ -2825,6 +3187,7 @@ socket.on('connect_error', () => {
   clearCappuccinoCelebration();
   pendingCappuccinoCelebration = null;
   trackedCappuccinoHandNo = null;
+  resetSocialState();
   if (el.lobbyView.classList.contains('hidden')) {
     showNotice(el.tableNotice, '连接失败，请检查网络后重试', 'error');
   } else {
@@ -2851,6 +3214,7 @@ socket.on('joinedRoom', ({ playerId }) => {
   resetCommunityRevealState(null);
   trackedSeatDealHandNo = null;
   trackedTurnCueToken = null;
+  resetSocialState();
   meId = playerId;
   replayState = null;
   closeLobbyPanels();
@@ -2868,6 +3232,10 @@ socket.on('roomState', (state) => {
   roomState = state;
   syncServerClock(state?.serverNow);
   renderRoom();
+});
+
+socket.on('emoteEvent', (payload) => {
+  handleIncomingEmote(payload);
 });
 
 socket.on('handHistoryData', ({ items }) => {
@@ -2899,6 +3267,7 @@ socket.on('kicked', (payload) => {
   resetCommunityRevealState(null);
   trackedSeatDealHandNo = null;
   trackedTurnCueToken = null;
+  resetSocialState();
   showNotice(el.notice, payload?.reason || '你已被移出房间', 'error');
   roomState = null;
   replayState = null;
@@ -3087,6 +3456,7 @@ el.leaveBtn.addEventListener('click', () => {
   resetCommunityRevealState(null);
   trackedSeatDealHandNo = null;
   trackedTurnCueToken = null;
+  resetSocialState();
   socket.emit('leaveRoom');
   roomState = null;
   replayState = null;
@@ -3228,11 +3598,88 @@ el.saveConfigBtn.addEventListener('click', () => {
   setSideTab('room', true);
 });
 
+if (el.socialCollapseBtn) {
+  el.socialCollapseBtn.addEventListener('click', () => {
+    uiSocialCollapsed = !uiSocialCollapsed;
+    applySocialDockState(true);
+  });
+}
+
+if (el.socialAnimBtn) {
+  el.socialAnimBtn.addEventListener('click', () => {
+    uiSocialAnimEnabled = !uiSocialAnimEnabled;
+    localStorage.setItem('holdem_social_anim', uiSocialAnimEnabled ? '1' : '0');
+    refreshSocialButtons();
+  });
+}
+
+if (el.socialSoundBtn) {
+  el.socialSoundBtn.addEventListener('click', () => {
+    const idx = EMOTE_SOUND_PACK_CYCLE.indexOf(uiEmoteSoundPack);
+    const next = EMOTE_SOUND_PACK_CYCLE[(idx + 1 + EMOTE_SOUND_PACK_CYCLE.length) % EMOTE_SOUND_PACK_CYCLE.length];
+    uiEmoteSoundPack = next;
+    localStorage.setItem('holdem_emote_sound', uiEmoteSoundPack);
+    refreshSocialButtons();
+  });
+}
+
+if (el.emoteTargetSelect) {
+  el.emoteTargetSelect.addEventListener('change', () => {
+    syncPropEmoteButtons();
+  });
+}
+
+quickEmoteButtons.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const code = String(btn.dataset.emoteCode || '').trim();
+    if (!code) return;
+    sendEmote('quick', code);
+  });
+});
+
+propEmoteButtons.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const code = String(btn.dataset.emoteCode || '').trim();
+    const targetId = String(el.emoteTargetSelect?.value || '');
+    if (!code || !targetId) {
+      showNotice(el.tableNotice, '请先选择互动目标', 'error');
+      return;
+    }
+    sendEmote('prop', code, targetId);
+  });
+});
+
+if (el.counterBtn) {
+  el.counterBtn.addEventListener('click', () => {
+    if (!socialCounterState?.fromId || !socialCounterState?.code) return;
+    sendEmote('prop', socialCounterState.code, socialCounterState.fromId, true);
+    clearSocialCounter();
+  });
+}
+
+if (el.socialChatSendBtn) {
+  el.socialChatSendBtn.addEventListener('click', () => {
+    if (!el.socialChatInput) return;
+    if (sendSocialChatMessage(el.socialChatInput.value)) {
+      el.socialChatInput.value = '';
+    }
+  });
+}
+
+if (el.socialChatInput) {
+  el.socialChatInput.addEventListener('keydown', (evt) => {
+    if (evt.key !== 'Enter') return;
+    evt.preventDefault();
+    if (sendSocialChatMessage(el.socialChatInput.value)) {
+      el.socialChatInput.value = '';
+    }
+  });
+}
+
 el.sendChatBtn.addEventListener('click', () => {
-  const message = el.chatInput.value.trim();
-  if (!message) return;
-  socket.emit('chatMessage', { message });
-  el.chatInput.value = '';
+  if (sendSocialChatMessage(el.chatInput.value)) {
+    el.chatInput.value = '';
+  }
 });
 
 el.chatInput.addEventListener('keydown', (e) => {
@@ -3279,6 +3726,9 @@ refreshMotionButton();
 refreshDensityButton();
 refreshActionPanelToggleButton();
 refreshSideTabs();
+uiEmoteSoundPack = normalizeEmoteSoundPack(uiEmoteSoundPack);
+applySocialDockState();
+syncPropEmoteButtons();
 if (uiProfitFilter !== 'me' && uiProfitFilter !== 'all') uiProfitFilter = 'all';
 refreshProfitFilterButtons();
 applySideLayout();

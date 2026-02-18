@@ -5,6 +5,13 @@ const { Server } = require('socket.io');
 
 const PORT = Number(process.env.HOLDEM_PORT || 3000);
 const AUTO_NEXT_HAND_DELAY_MS = 2000;
+const EMOTE_LIMIT_WINDOW_MS = 60 * 1000;
+const EMOTE_LIMIT_COUNT = 20;
+const EMOTE_MIN_INTERVAL_MS = 350;
+const EMOTE_COMBO_WINDOW_MS = 2200;
+const EMOTE_COMBO_MAX = 5;
+const QUICK_EMOTE_SET = new Set(['like', 'laugh', 'wow', 'cry', '666', 'heart']);
+const PROP_EMOTE_SET = new Set(['egg', 'flower', 'water', 'rocket', 'kiss', 'tomato']);
 
 const DEFAULT_SETTINGS = Object.freeze({
   startingStack: 2000,
@@ -172,6 +179,55 @@ function appendGameEvent(room, type, message, extra = {}) {
   if (game.actionLog.length > 500) {
     game.actionLog.splice(0, game.actionLog.length - 500);
   }
+}
+
+function ensureEmoteState(room) {
+  if (!room.emoteRateState) room.emoteRateState = new Map();
+  if (!room.emoteComboState) room.emoteComboState = new Map();
+  if (!Number.isFinite(room.lastEmoteSeq)) room.lastEmoteSeq = 0;
+}
+
+function allowEmoteSend(room, memberId) {
+  ensureEmoteState(room);
+  const now = Date.now();
+  const state = room.emoteRateState.get(memberId) || {
+    windowStartAt: now,
+    sentInWindow: 0,
+    lastSentAt: 0,
+  };
+
+  if (now - state.windowStartAt >= EMOTE_LIMIT_WINDOW_MS) {
+    state.windowStartAt = now;
+    state.sentInWindow = 0;
+  }
+
+  if (state.lastSentAt && now - state.lastSentAt < EMOTE_MIN_INTERVAL_MS) {
+    return { ok: false, error: '发送太快，请稍后再试' };
+  }
+
+  if (state.sentInWindow >= EMOTE_LIMIT_COUNT) {
+    return { ok: false, error: '你发得太频繁了，请稍后再试' };
+  }
+
+  state.lastSentAt = now;
+  state.sentInWindow += 1;
+  room.emoteRateState.set(memberId, state);
+  return { ok: true };
+}
+
+function nextEmoteComboLevel(room, fromId, targetId, code) {
+  ensureEmoteState(room);
+  if (!targetId) return 1;
+
+  const key = `${fromId}->${targetId}:${code}`;
+  const now = Date.now();
+  const prev = room.emoteComboState.get(key);
+  let combo = 1;
+  if (prev && now - prev.ts <= EMOTE_COMBO_WINDOW_MS) {
+    combo = Math.min(EMOTE_COMBO_MAX, (prev.combo || 1) + 1);
+  }
+  room.emoteComboState.set(key, { combo, ts: now });
+  return combo;
 }
 
 function archiveFinishedHand(room) {
@@ -1721,6 +1777,9 @@ io.on('connection', (socket) => {
       autoStartAt: null,
       handHistory: [],
       bannedNames: new Set(),
+      emoteRateState: new Map(),
+      emoteComboState: new Map(),
+      lastEmoteSeq: 0,
     };
 
     rooms.set(roomId, room);
@@ -2172,6 +2231,74 @@ io.on('connection', (socket) => {
 
     logRoom(room, `${name}${role === 'spectator' ? '(观战)' : ''}: ${message}`);
     broadcastRoom(room);
+  });
+
+  socket.on('sendEmote', (payload = {}) => {
+    const room = currentRoomOfSocket(socket);
+    if (!room) return;
+
+    const role = getRole(room, socket.id);
+    if (!role) return;
+
+    const fromPlayer = getPlayer(room, socket.id);
+    const fromSpectator = getSpectator(room, socket.id);
+    const fromName = fromPlayer?.name || fromSpectator?.name || '匿名';
+
+    const kind = String(payload.kind || '').toLowerCase();
+    const code = String(payload.code || '').toLowerCase();
+    const targetIdRaw = String(payload.targetId || '').trim();
+    const counter = Boolean(payload.counter);
+
+    if (kind !== 'quick' && kind !== 'prop') {
+      sendError(socket, '无效表情类型');
+      return;
+    }
+
+    if (kind === 'quick' && !QUICK_EMOTE_SET.has(code)) {
+      sendError(socket, '不支持的快捷表情');
+      return;
+    }
+
+    if (kind === 'prop' && !PROP_EMOTE_SET.has(code)) {
+      sendError(socket, '不支持的互动道具');
+      return;
+    }
+
+    const limit = allowEmoteSend(room, socket.id);
+    if (!limit.ok) {
+      sendError(socket, limit.error);
+      return;
+    }
+
+    let targetId = '';
+    if (kind === 'prop') {
+      targetId = targetIdRaw;
+      if (!targetId || targetId === socket.id) {
+        sendError(socket, '请选择其他玩家作为目标');
+        return;
+      }
+      const targetExists = Boolean(getPlayer(room, targetId) || getSpectator(room, targetId));
+      if (!targetExists) {
+        sendError(socket, '目标不存在或已离开');
+        return;
+      }
+    }
+
+    const combo = kind === 'prop' ? nextEmoteComboLevel(room, socket.id, targetId, code) : 1;
+    room.lastEmoteSeq += 1;
+    io.to(room.id).emit('emoteEvent', {
+      id: `${room.id}-${room.lastEmoteSeq}`,
+      ts: Date.now(),
+      roomId: room.id,
+      fromId: socket.id,
+      fromName,
+      fromRole: role,
+      kind,
+      code,
+      targetId: targetId || null,
+      combo,
+      counter,
+    });
   });
 
   socket.on('leaveRoom', () => {

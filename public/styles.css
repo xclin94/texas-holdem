@@ -74,7 +74,10 @@ body[data-motion='reduced'] .chip-push-gain,
 body[data-motion='reduced'] .maid-card,
 body[data-motion='reduced'] .cup-card,
 body[data-motion='reduced'] .coffee-pour,
-body[data-motion='reduced'] .cappuccino-msg {
+body[data-motion='reduced'] .cappuccino-msg,
+body[data-motion='reduced'] .emote-bubble,
+body[data-motion='reduced'] .emote-shot,
+body[data-motion='reduced'] .emote-impact {
   animation: none !important;
 }
 
@@ -670,6 +673,283 @@ input[type='checkbox'] {
   position: absolute;
   inset: 0;
   z-index: 2;
+}
+
+.emote-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.social-dock {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  width: min(460px, calc(100% - 20px));
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(5, 16, 10, 0.78);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(5px);
+  z-index: 6;
+  pointer-events: auto;
+}
+
+.social-dock.collapsed {
+  width: auto;
+  min-width: 180px;
+}
+
+.social-dock.collapsed .social-body {
+  display: none;
+}
+
+.social-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.social-head strong {
+  font-size: 12px;
+  letter-spacing: 0.4px;
+  color: #ffe4a9;
+}
+
+.social-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.social-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+
+.social-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.social-row .btn.tiny {
+  padding: 4px 6px;
+  min-width: 56px;
+}
+
+.social-target-row select {
+  flex: 1 1 140px;
+  min-width: 140px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.26);
+  color: var(--text);
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.social-target-row select:focus {
+  outline: none;
+  border-color: rgba(232, 187, 97, 0.8);
+}
+
+.social-counter {
+  border: 1px solid rgba(255, 178, 120, 0.45);
+  border-radius: 10px;
+  background: rgba(95, 31, 14, 0.38);
+  color: #ffe5bf;
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.social-chat-feed-wrap {
+  position: relative;
+}
+
+.social-unread {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 211, 204, 0.85);
+  background: rgba(168, 34, 51, 0.9);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  z-index: 1;
+}
+
+.social-chat-feed {
+  min-height: 62px;
+  max-height: 110px;
+  overflow: auto;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.24);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.mini-chat-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  color: #dceee1;
+  font-size: 12px;
+}
+
+.mini-chat-item.mine {
+  justify-content: flex-end;
+}
+
+.mini-chat-item .who {
+  color: #9ec9a7;
+  white-space: nowrap;
+}
+
+.mini-chat-item .msg {
+  overflow-wrap: anywhere;
+}
+
+.social-chat-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.social-chat-input input {
+  min-width: 0;
+  padding: 7px 9px;
+  font-size: 12px;
+}
+
+.social-chat-input .btn {
+  white-space: nowrap;
+}
+
+.emote-bubble {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(calc(var(--bx) - 50%), calc(var(--by) - 50%));
+  min-width: 42px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 242, 214, 0.65);
+  background: rgba(12, 16, 11, 0.82);
+  padding: 3px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #fff1cc;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0;
+  animation: emoteBubbleFloat 1700ms ease-out forwards;
+  box-shadow: 0 7px 18px rgba(0, 0, 0, 0.35);
+}
+
+.emote-bubble.combo {
+  border-color: rgba(255, 214, 137, 0.85);
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(255, 214, 137, 0.24);
+}
+
+.emote-bubble .emo {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.emote-bubble small {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emote-combo-tag {
+  border-radius: 999px;
+  padding: 1px 5px;
+  background: rgba(255, 206, 109, 0.92);
+  color: #291807;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.emote-shot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(calc(var(--sx) - 50%), calc(var(--sy) - 50%));
+  font-size: 24px;
+  line-height: 1;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.35));
+  opacity: 0;
+  animation: emoteShotFly 920ms cubic-bezier(0.2, 0.75, 0.28, 1) forwards;
+}
+
+.emote-shot.counter {
+  filter:
+    drop-shadow(0 6px 10px rgba(0, 0, 0, 0.35))
+    drop-shadow(0 0 6px rgba(255, 206, 109, 0.52));
+}
+
+.emote-shot.combo {
+  font-size: 27px;
+}
+
+.emote-impact {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(calc(var(--ix) - 50%), calc(var(--iy) - 50%));
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 241, 206, 0.62);
+  background: rgba(12, 16, 11, 0.86);
+  padding: 4px 9px;
+  color: #ffe8b8;
+  opacity: 0;
+  animation: emoteImpactPop 940ms ease-out forwards;
+}
+
+.emote-impact.combo {
+  border-color: rgba(255, 214, 137, 0.86);
+  box-shadow: 0 0 0 1px rgba(255, 214, 137, 0.24);
+}
+
+.emote-impact span {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.emote-impact small {
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .chip-push-layer {
@@ -1571,6 +1851,52 @@ input[type='checkbox'] {
   }
 }
 
+@keyframes emoteBubbleFloat {
+  0% {
+    transform: translate(calc(var(--bx) - 50%), calc(var(--by) - 50%)) translateY(7px) scale(0.84);
+    opacity: 0;
+  }
+  16% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(var(--bx) - 50%), calc(var(--by) - 50%)) translateY(-34px) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes emoteShotFly {
+  0% {
+    transform: translate(calc(var(--sx) - 50%), calc(var(--sy) - 50%)) scale(0.76);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  78% {
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate(calc(var(--tx) - 50%), calc(var(--ty) - 50%)) scale(0.84);
+    opacity: 0;
+  }
+}
+
+@keyframes emoteImpactPop {
+  0% {
+    transform: translate(calc(var(--ix) - 50%), calc(var(--iy) - 50%)) scale(0.78);
+    opacity: 0;
+  }
+  18% {
+    transform: translate(calc(var(--ix) - 50%), calc(var(--iy) - 50%)) scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(var(--ix) - 50%), calc(var(--iy) - 50%)) translateY(-10px) scale(0.97);
+    opacity: 0;
+  }
+}
+
 .hint {
   margin: 0 0 8px;
   color: var(--muted);
@@ -2041,6 +2367,27 @@ input[type='checkbox'] {
     padding-bottom: 120px;
   }
 
+  .social-dock {
+    right: 6px;
+    left: 6px;
+    width: auto;
+    bottom: 6px;
+  }
+
+  .social-row .btn.tiny {
+    font-size: 11px;
+    min-width: 52px;
+  }
+
+  .social-target-row select {
+    min-width: 118px;
+    flex-basis: 118px;
+  }
+
+  .social-chat-feed {
+    max-height: 84px;
+  }
+
   .table-oval {
     width: 98%;
     height: 220px;
@@ -2209,6 +2556,39 @@ input[type='checkbox'] {
     padding-bottom: 220px;
   }
 
+  .social-head {
+    padding: 7px 8px;
+  }
+
+  .social-body {
+    padding: 0 8px 8px;
+    gap: 5px;
+  }
+
+  .social-head-actions {
+    gap: 4px;
+  }
+
+  .social-head-actions .btn.tiny {
+    font-size: 11px;
+    padding: 3px 6px;
+  }
+
+  .social-row .btn.tiny {
+    padding: 3px 5px;
+    font-size: 10px;
+    min-width: 48px;
+  }
+
+  .social-chat-input {
+    gap: 4px;
+  }
+
+  .social-chat-input input {
+    padding: 6px 7px;
+    font-size: 11px;
+  }
+
   .table-oval {
     height: 206px;
   }
@@ -2280,6 +2660,16 @@ input[type='checkbox'] {
   .table-canvas {
     min-height: 560px;
     padding-bottom: 92px;
+  }
+
+  .social-dock {
+    right: 6px;
+    bottom: 4px;
+    max-width: 390px;
+  }
+
+  .social-chat-feed {
+    max-height: 72px;
   }
 
   .table-oval {

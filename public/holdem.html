@@ -226,6 +226,48 @@
                 <div id="communityCards" class="cards board-cards"></div>
               </div>
               <div id="seatMap" class="seat-map"></div>
+              <div id="emoteLayer" class="emote-layer"></div>
+              <section id="socialDock" class="social-dock collapsed">
+                <div class="social-head">
+                  <strong>互动</strong>
+                  <div class="social-head-actions">
+                    <button id="socialSoundBtn" class="btn tiny ghost">音效:经典</button>
+                    <button id="socialAnimBtn" class="btn tiny ghost">动画:开</button>
+                    <button id="socialCollapseBtn" class="btn tiny">展开</button>
+                  </div>
+                </div>
+                <div id="socialBody" class="social-body">
+                  <div class="social-row">
+                    <button class="btn tiny quick-emote-btn" data-emote-code="like">👍 点赞</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="laugh">😂 爆笑</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="wow">😮 惊了</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="cry">😭 哭了</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="666">🔥 666</button>
+                    <button class="btn tiny quick-emote-btn" data-emote-code="heart">❤️ 比心</button>
+                  </div>
+                  <div class="social-row social-target-row">
+                    <select id="emoteTargetSelect"></select>
+                    <button class="btn tiny prop-emote-btn" data-emote-code="egg">🥚 鸡蛋</button>
+                    <button class="btn tiny prop-emote-btn" data-emote-code="flower">🌹 送花</button>
+                    <button class="btn tiny prop-emote-btn" data-emote-code="water">💦 泼水</button>
+                    <button class="btn tiny prop-emote-btn" data-emote-code="rocket">🚀 火箭</button>
+                    <button class="btn tiny prop-emote-btn" data-emote-code="kiss">😘 飞吻</button>
+                    <button class="btn tiny prop-emote-btn" data-emote-code="tomato">🍅 番茄</button>
+                  </div>
+                  <div id="counterRow" class="social-counter hidden">
+                    <span id="counterText">被互动了，是否反击？</span>
+                    <button id="counterBtn" class="btn tiny primary">反击</button>
+                  </div>
+                  <div class="social-chat-feed-wrap">
+                    <div id="socialUnreadBadge" class="social-unread hidden">0</div>
+                    <div id="socialChatFeed" class="social-chat-feed"></div>
+                  </div>
+                  <div class="social-chat-input">
+                    <input id="socialChatInput" maxlength="120" placeholder="实时聊天（回车发送）" />
+                    <button id="socialChatSendBtn" class="btn tiny">发送</button>
+                  </div>
+                </div>
+              </section>
             </section>
 
             <section id="actionPanel" class="action-panel hidden">
