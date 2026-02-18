@@ -1502,6 +1502,29 @@ function compactStackText(value) {
   return String(Math.max(0, Math.floor(n)));
 }
 
+function stackVisualTier(stack, base) {
+  const s = Math.max(0, Number(stack) || 0);
+  const b = Math.max(1, Number(base) || 1);
+  const ratio = s / b;
+  if (s <= 0) return 0;
+  if (ratio < 0.5) return 1;
+  if (ratio < 1.2) return 2;
+  if (ratio < 2.5) return 3;
+  if (ratio < 4.5) return 4;
+  return 5;
+}
+
+function createStackVisual(stack, base) {
+  const tier = stackVisualTier(stack, base);
+  const box = document.createElement('div');
+  box.className = `seat-stack-visual tier-${tier}`;
+  box.innerHTML = '<i></i><i></i><i></i>';
+  const txt = document.createElement('span');
+  txt.textContent = tier === 0 ? '空' : `筹${tier}`;
+  box.appendChild(txt);
+  return box;
+}
+
 function getSeatLayout(maxPlayers, compact) {
   const count = clampInt(maxPlayers, 2, 9);
   if (compact && isNarrowMobileView() && NARROW_MOBILE_SEAT_LAYOUTS[count]) {
@@ -1600,6 +1623,7 @@ function renderSeatMap() {
   el.seatMap.innerHTML = '';
   const players = roomState?.players || [];
   const maxPlayers = roomState?.settings?.maxPlayers || 9;
+  const baseStack = roomState?.settings?.startingStack || 2000;
   const handNo = roomState?.game?.handNo || null;
   const me = roomPlayerById(meId);
   const mySeat = me?.seat || null;
@@ -1714,6 +1738,7 @@ function renderSeatMap() {
     const betChip = document.createElement('div');
     betChip.className = `seat-bet-chip${streetBet > 0 ? ' active' : ''}`;
     betChip.textContent = compact ? (streetBet > 0 ? `轮+${streetBet}` : '轮+0') : `本轮 +${streetBet}`;
+    const stackVisual = createStackVisual(p.stack, baseStack);
 
     const cards = document.createElement('div');
     cards.className = 'seat-cards';
@@ -1734,6 +1759,7 @@ function renderSeatMap() {
     node.appendChild(head);
     node.appendChild(badges);
     node.appendChild(betChip);
+    node.appendChild(stackVisual);
     node.appendChild(sub);
     if (act) node.appendChild(act);
     if (cards.children.length > 0) {
@@ -2087,7 +2113,7 @@ function renderResult() {
     .join('<br/>');
   const canContinue = Boolean(roomState?.canStart);
   const autoStartSec = roomState?.autoStartAt ? Math.max(0, Math.ceil((roomState.autoStartAt - nowByServer()) / 1000)) : 0;
-  const autoStartDelayMs = Math.max(800, Number(roomState?.autoStartDelayMs || 2200));
+  const autoStartDelayMs = Math.max(800, Number(roomState?.autoStartDelayMs || 2000));
   const autoStartRemainMs = roomState?.autoStartAt ? Math.max(0, roomState.autoStartAt - nowByServer()) : 0;
   const autoStartPct = Math.max(0, Math.min(100, Math.round((autoStartRemainMs / autoStartDelayMs) * 100)));
   const iAmHost = roomState?.hostId === meId;
@@ -3128,7 +3154,10 @@ el.nameInput.addEventListener('change', persistName);
 
 setInterval(() => {
   if (el.lobbyView.classList.contains('hidden')) {
-    if (roomState) renderStatus();
+    if (roomState) {
+      renderStatus();
+      renderResult();
+    }
   } else {
     if (Date.now() - lastLobbyFetchAt > LOBBY_REFRESH_INTERVAL_MS && socket.connected) {
       socket.emit('listRooms');

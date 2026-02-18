@@ -991,6 +991,67 @@ input[type='checkbox'] {
   animation: streetBetPulse 1.2s ease-in-out infinite;
 }
 
+.seat-stack-visual {
+  margin-top: 2px;
+  margin-bottom: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 999px;
+  padding: 1px 6px 1px 4px;
+  background: rgba(8, 18, 14, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.seat-stack-visual i {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 233, 184, 0.65);
+  background: radial-gradient(circle at 35% 30%, rgba(255, 249, 227, 0.92), rgba(232, 187, 97, 0.88) 58%, rgba(124, 81, 28, 0.85));
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.26);
+}
+
+.seat-stack-visual span {
+  margin-left: 2px;
+  font-size: 9px;
+  color: #ffe8b8;
+  letter-spacing: 0.1px;
+}
+
+.seat-stack-visual.tier-0 i {
+  opacity: 0.15;
+}
+
+.seat-stack-visual.tier-0 span {
+  color: #b5c9bc;
+}
+
+.seat-stack-visual.tier-1 i:nth-child(2),
+.seat-stack-visual.tier-1 i:nth-child(3) {
+  opacity: 0.2;
+}
+
+.seat-stack-visual.tier-2 i:nth-child(3) {
+  opacity: 0.25;
+}
+
+.seat-stack-visual.tier-3 i {
+  transform: scale(1);
+}
+
+.seat-stack-visual.tier-4 i {
+  transform: scale(1.1);
+}
+
+.seat-stack-visual.tier-5 {
+  box-shadow: 0 0 0 1px rgba(232, 187, 97, 0.26);
+}
+
+.seat-stack-visual.tier-5 i {
+  transform: scale(1.15);
+}
+
 .seat-node.compact .seat-bet-chip {
   font-size: 10px;
   padding: 1px 6px;
@@ -998,9 +1059,19 @@ input[type='checkbox'] {
   margin-bottom: 1px;
 }
 
+.seat-node.compact .seat-stack-visual {
+  transform: scale(0.95);
+  transform-origin: left center;
+}
+
 .seat-node.dense .seat-bet-chip {
   font-size: 9px;
   padding: 1px 5px;
+}
+
+.seat-node.dense .seat-stack-visual {
+  transform: scale(0.88);
+  transform-origin: left center;
 }
 
 #streetBetTotalText {

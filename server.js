@@ -4,7 +4,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 
 const PORT = Number(process.env.HOLDEM_PORT || 3000);
-const AUTO_NEXT_HAND_DELAY_MS = 4500;
+const AUTO_NEXT_HAND_DELAY_MS = 2000;
 
 const DEFAULT_SETTINGS = Object.freeze({
   startingStack: 2000,
@@ -871,7 +871,9 @@ function advanceStreet(room) {
   }
 
   const dealerIndex = game.order.indexOf(game.dealerId);
-  const firstActIndex = nextEligibleFrom(game.order, dealerIndex, (id) => eligibleToActInOrder(room, id));
+  const firstActIndex = game.order.length === 2
+    ? nextEligibleFrom(game.order, game.order.indexOf(game.bigBlindId), (id) => eligibleToActInOrder(room, id))
+    : nextEligibleFrom(game.order, dealerIndex, (id) => eligibleToActInOrder(room, id));
   assignPendingAndTurn(room, firstActIndex);
 }
 
