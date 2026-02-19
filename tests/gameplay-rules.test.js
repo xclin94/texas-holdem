@@ -181,6 +181,17 @@ function socketById(sockets) {
   return map;
 }
 
+function playerById(state, id) {
+  return (state?.players || []).find((p) => p.id === id) || null;
+}
+
+function toCallFor(state, id) {
+  const g = state?.game;
+  const p = playerById(state, id);
+  if (!g || !p) return 0;
+  return Math.max(0, Number(g.currentBet || 0) - Number(p.betThisStreet || 0));
+}
+
 test.before(async () => {
   serverPort = await findFreePort();
   serverProcess = spawn(process.execPath, ['server.js'], {
@@ -474,4 +485,108 @@ test('disconnected player keeps seat and can recover by reconnect key', async (t
   const guestAfter = (recoveredState.players || []).find((p) => p.seat === guestSeat);
   assert.equal(guestAfter?.connected, true);
   assert.equal(guestAfter?.name, guestName);
+});
+
+test('lobby list includes newly created room for other clients', async (t) => {
+  const host = await connectClient();
+  const guest = await connectClient();
+  t.after(() => {
+    closeSocket(host);
+    closeSocket(guest);
+  });
+
+  const roomId = await createRoomAs(host, `Host-${Date.now().toString(36).slice(-4)}`, { allowStraddle: false });
+
+  guest.emit('listRooms');
+  const lobbyState = await waitForEvent(
+    guest,
+    'lobbyRooms',
+    (payload) => Array.isArray(payload?.rooms) && payload.rooms.some((room) => room?.roomId === roomId),
+    EVENT_TIMEOUT_MS + 3000,
+  );
+  const room = (lobbyState.rooms || []).find((item) => item.roomId === roomId);
+  assert.equal(Boolean(room), true);
+  assert.equal(room.playerCount, 1);
+  assert.equal(room.readyCount, 1);
+});
+
+test('rebuy restores busted player stack and records rebuy metrics', async (t) => {
+  const { sockets } = await setupPlayers(t, 2, {
+    allowStraddle: false,
+    startingStack: 200,
+    smallBlind: 50,
+    bigBlind: 100,
+  });
+  const [host] = sockets;
+  const byId = socketById(sockets);
+
+  host.emit('startHand');
+  let state = await waitForEvent(
+    host,
+    'roomState',
+    (next) => next?.game && !next.game.finished && next.game.phase === 'preflop' && Boolean(next.game.turnId),
+    EVENT_TIMEOUT_MS + 3000,
+  );
+
+  let bustedPlayerId = '';
+  for (let i = 0; i < 4; i += 1) {
+    const handNo = state.game.handNo;
+    const firstActorId = state.game.turnId;
+    const afterFirstAction = waitForEvent(
+      host,
+      'roomState',
+      (next) =>
+        next?.game?.handNo === handNo &&
+        (next.game.finished || (Boolean(next.game.turnId) && !next.game.finished && next.game.turnId !== firstActorId)),
+      EVENT_TIMEOUT_MS + 3000,
+    );
+    byId.get(firstActorId).emit('playerAction', { action: 'allin' });
+    const afterFirst = await afterFirstAction;
+
+    let finished = afterFirst;
+    if (!afterFirst.game.finished) {
+      const secondActorId = afterFirst.game.turnId;
+      const secondAction = toCallFor(afterFirst, secondActorId) > 0 ? 'call' : 'check';
+      const finishedState = waitForEvent(
+        host,
+        'roomState',
+        (next) => next?.game?.handNo === handNo && next.game.finished,
+        EVENT_TIMEOUT_MS + 6000,
+      );
+      byId.get(secondActorId).emit('playerAction', { action: secondAction });
+      finished = await finishedState;
+    }
+    const busted = (finished.players || []).find((p) => Number(p.stack) <= 0);
+    if (busted?.id) {
+      bustedPlayerId = busted.id;
+      break;
+    }
+
+    state = await waitForEvent(
+      host,
+      'roomState',
+      (next) => next?.game && !next.game.finished && next.game.handNo === handNo + 1,
+      EVENT_TIMEOUT_MS + 6000,
+    );
+  }
+
+  assert.equal(Boolean(bustedPlayerId), true);
+  const bustedSocket = byId.get(bustedPlayerId);
+  assert.equal(Boolean(bustedSocket), true);
+
+  const rebuyState = waitForEvent(
+    host,
+    'roomState',
+    (next) => {
+      const player = (next?.players || []).find((p) => p.id === bustedPlayerId);
+      return Boolean(player && Number(player.rebuyCount) >= 1 && Number(player.rebuyTotal) >= 200 && Number(player.stack) > 0);
+    },
+    EVENT_TIMEOUT_MS + 4000,
+  );
+  bustedSocket.emit('rebuy');
+  const rebought = await rebuyState;
+  const player = (rebought.players || []).find((p) => p.id === bustedPlayerId);
+  assert.equal(player.stack > 0 && player.stack <= 200, true);
+  assert.equal(player.rebuyCount, 1);
+  assert.equal(player.rebuyTotal, 200);
 });

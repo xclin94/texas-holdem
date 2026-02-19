@@ -35,6 +35,16 @@ test('client display logic keeps expected status/button/reconnect rules', () => 
 
   // fold throw visual effect is wired from action tracking
   assert.equal(js.includes('spawnFoldDiscardEffect'), true);
+
+  // chat and social overlay contracts
+  assert.equal(js.includes('who.textContent = `${item.sender}:`;'), true);
+  assert.equal(js.includes('msg.textContent = event.message || \'\';'), true);
+
+  // stack text must stay full numeric format instead of k/m shorthand
+  assert.equal(js.includes('return String(Math.max(0, Math.floor(n)));'), true);
+
+  // big-win effect should use moneybag instead of old maid/cappuccino scene
+  assert.equal(js.includes("node.className = 'moneybag-celebration';"), true);
 });
 
 test('styles keep board readability and visible card-back/fold effects', () => {
@@ -49,4 +59,8 @@ test('styles keep board readability and visible card-back/fold effects', () => {
 
   assert.equal(css.includes('.fold-throw-card {'), true);
   assert.equal(css.includes('@keyframes foldThrow'), true);
+
+  // moneybag visual keyframes/styles should exist for big-win effect
+  assert.equal(css.includes('.moneybag-main {'), true);
+  assert.equal(css.includes('@keyframes moneybagZoom'), true);
 });
