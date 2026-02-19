@@ -4,6 +4,7 @@
   "main": "server.js",
   "scripts": {
     "test": "node --test tests/*.test.js",
+    "test:soak": "SOAK_ROUNDS=3 node scripts/soak-tests.js",
     "test:phase": "node --test tests/phase-social.test.js",
     "start": "HOLDEM_PORT=3000 node server.js",
     "dev": "HOLDEM_PORT=3000 node server.js",
