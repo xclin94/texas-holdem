@@ -2816,14 +2816,20 @@ function renderStatus() {
       const firstWinner = g.result?.winners?.[0];
       showHandBanner(firstWinner ? `${firstWinner.name || roomMemberName(firstWinner.playerId)} 赢下本手` : '结算完成', 'ok', 2100);
       queuePotPushAnimation(g.handNo, g.result);
-      const myWin = Math.max(
-        0,
-        Number((g.result?.winners || []).find((w) => w?.playerId === meId)?.amount) || 0,
-      );
+      const topWinner = (g.result?.winners || []).reduce((best, cur) => {
+        const curAmount = Math.max(0, Number(cur?.amount) || 0);
+        if (!best) return { playerId: cur?.playerId, amount: curAmount };
+        return curAmount > best.amount ? { playerId: cur?.playerId, amount: curAmount } : best;
+      }, null);
       const halfBuyIn = Math.max(1, Math.floor((Number(roomState?.settings?.startingStack) || 0) / 2));
-      if (myWin >= halfBuyIn && trackedCappuccinoHandNo !== g.handNo) {
+      const shouldShowMoneybag = Boolean(
+        topWinner &&
+          topWinner.playerId === meId &&
+          topWinner.amount >= halfBuyIn,
+      );
+      if (shouldShowMoneybag && trackedCappuccinoHandNo !== g.handNo) {
         trackedCappuccinoHandNo = g.handNo;
-        queueCappuccinoCelebration(g.handNo, myWin);
+        queueCappuccinoCelebration(g.handNo, topWinner.amount);
       }
     }
   }
