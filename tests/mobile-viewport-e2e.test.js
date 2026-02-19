@@ -8,6 +8,7 @@ const { chromium } = require('playwright');
 const ROOT = path.resolve(__dirname, '..');
 const SERVER_START_TIMEOUT_MS = 10000;
 const MOBILE_VIEWPORT = { width: 390, height: 844 };
+const LANDSCAPE_MOBILE_VIEWPORT = { width: 844, height: 390 };
 
 let serverProcess = null;
 let serverPort = null;
@@ -304,4 +305,53 @@ test('mobile all-in flow reveals board sequentially before chip-settlement effec
   assert.equal(c5.t - c4.t >= 350, true);
   assert.equal(typeof probe.chipLayerAt === 'number', true);
   assert.equal(probe.chipLayerAt >= c5.t - 40, true);
+});
+
+test('mobile landscape layout keeps compact phase and launcher stack', async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(async () => {
+    await browser.close();
+  });
+
+  const context = await browser.newContext({ viewport: LANDSCAPE_MOBILE_VIEWPORT });
+  const page = await context.newPage();
+  t.after(async () => {
+    await context.close();
+  });
+
+  await createRoomAsHost(page);
+
+  const metrics = await page.evaluate(() => {
+    const status = document.querySelector('.status-row');
+    const mobilePhase = document.getElementById('mobilePhaseText');
+    const socialLauncher = document.getElementById('socialLauncherBtn');
+    const settingsLauncher = document.getElementById('sideToggleBtn');
+    const table = document.getElementById('tableCanvas');
+
+    const statusDisplay = status ? getComputedStyle(status).display : '';
+    const phaseDisplay = mobilePhase ? getComputedStyle(mobilePhase).display : '';
+    const phaseRect = mobilePhase?.getBoundingClientRect() || null;
+    const socialRect = socialLauncher?.getBoundingClientRect() || null;
+    const settingsRect = settingsLauncher?.getBoundingClientRect() || null;
+    const tableRect = table?.getBoundingClientRect() || null;
+
+    return {
+      statusDisplay,
+      phaseDisplay,
+      phaseText: mobilePhase?.textContent || '',
+      phaseRect,
+      socialRect,
+      settingsRect,
+      tableRect,
+    };
+  });
+
+  assert.equal(metrics.statusDisplay, 'none');
+  assert.notEqual(metrics.phaseDisplay, 'none');
+  assert.equal(metrics.phaseText.length > 0, true);
+  assert.equal(metrics.phaseRect.left - metrics.tableRect.left <= 20, true);
+  assert.equal(metrics.phaseRect.top - metrics.tableRect.top <= 20, true);
+  assert.equal(metrics.socialRect.left - metrics.tableRect.left <= 20, true);
+  assert.equal(metrics.tableRect.bottom - metrics.socialRect.bottom <= 14, true);
+  assert.equal(metrics.settingsRect.bottom < metrics.socialRect.top, true);
 });
