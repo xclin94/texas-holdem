@@ -33,10 +33,15 @@ test('mobile layout contract keeps key visibility and placement rules', () => {
   // <=420 and landscape-phone rules should still preserve mobile phase text.
   assert.equal(css.includes('@media (max-width: 420px)'), true);
   assert.equal(css.includes('@media (orientation: landscape) and (max-height: 540px) and (max-width: 960px)'), true);
+
+  // Pre-action options should be explicit check / fold (no combined option).
+  assert.equal(html.includes('id="preCheckBtn"'), true);
+  assert.equal(html.includes('id="preFoldBtn"'), true);
 });
 
 test('flow pacing contract keeps reveal/order/turn cues consistent', () => {
   const js = read('public/client.js');
+  const css = read('public/styles.css');
 
   // Sequential board reveal gap: 0.5s between additional cards.
   assert.equal(js.includes('const COMMUNITY_REVEAL_GAP_MS = 500;'), true);
@@ -55,4 +60,8 @@ test('flow pacing contract keeps reveal/order/turn cues consistent', () => {
 
   // Seat hand type should be rendered in seat card area.
   assert.equal(js.includes("handTypeTag.className = 'seat-hand-type';"), true);
+
+  // Hole cards should render outside seat frame.
+  assert.equal(js.includes('buildSeatHoleCardsNode'), true);
+  assert.equal(css.includes('.seat-hole-cards'), true);
 });

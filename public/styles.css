@@ -1580,13 +1580,13 @@ input[type='checkbox'] {
 
 .seat-node {
   position: absolute;
-  width: 170px;
-  min-height: 116px;
-  border-radius: 14px;
+  width: 146px;
+  min-height: 86px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(0, 0, 0, 0.34);
   backdrop-filter: blur(2px);
-  padding: 8px;
+  padding: 6px;
   transform: translate(-50%, -50%);
   transition:
     left 260ms ease,
@@ -1719,23 +1719,49 @@ input[type='checkbox'] {
 
 .seat-head {
   font-weight: 700;
-  font-size: 13px;
-  margin-bottom: 3px;
+  font-size: 12px;
+  margin-bottom: 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .seat-node.has-hand-type .seat-head {
-  padding-right: 72px;
+  padding-right: 66px;
 }
 
 .seat-sub {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.seat-hole-cards {
+  position: absolute;
+  display: inline-flex;
+  gap: 4px;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 12;
+}
+
+.seat-hole-cards.outside-up {
+  transform: translate(-50%, calc(-50% - var(--hole-offset, 28px)));
+}
+
+.seat-hole-cards.outside-down {
+  transform: translate(-50%, calc(-50% + var(--hole-offset, 28px)));
+}
+
+.seat-hole-card {
+  width: 24px;
+  height: 34px;
+  border-radius: 6px;
+  font-size: 11px;
 }
 
 .seat-cards {
@@ -1752,11 +1778,11 @@ input[type='checkbox'] {
 }
 
 .seat-node.dense .seat-head {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .seat-node.dense .seat-sub {
-  font-size: 10px;
+  font-size: 9px;
 }
 
 .seat-node.dense .seat-cards .card-face {
@@ -1778,7 +1804,7 @@ input[type='checkbox'] {
 }
 
 .seat-node.compact .seat-sub {
-  font-size: 10px;
+  font-size: 9px;
 }
 
 .cards {
@@ -2108,9 +2134,13 @@ input[type='checkbox'] {
 .action-main-row,
 .action-sub-row {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   align-items: stretch;
   flex-wrap: nowrap;
+}
+
+.action-sub-row {
+  margin-top: 10px;
 }
 
 .action-main-row .btn {
@@ -3212,9 +3242,9 @@ input[type='checkbox'] {
   }
 
   .card-face {
-    width: 44px;
-    height: 54px;
-    font-size: 14px;
+    width: 40px;
+    height: 50px;
+    font-size: 13px;
   }
 
   .seat-node {
@@ -3238,13 +3268,13 @@ input[type='checkbox'] {
   }
 
   .seat-head {
-    font-size: 12px;
+    font-size: 11px;
     margin-bottom: 2px;
     line-height: 1.2;
   }
 
   .seat-sub {
-    font-size: 10px;
+    font-size: 9px;
     line-height: 1.2;
     margin-top: 2px;
   }
@@ -3259,16 +3289,11 @@ input[type='checkbox'] {
     padding: 1px 6px;
   }
 
-  .seat-cards {
-    margin-top: 4px;
-    gap: 4px;
-  }
-
-  .seat-cards .card-face {
-    width: 24px;
-    height: 34px;
-    border-radius: 6px;
-    font-size: 11px;
+  .seat-hole-card {
+    width: 20px;
+    height: 28px;
+    border-radius: 5px;
+    font-size: 10px;
   }
 
   .seat-turn-progress {
@@ -3462,10 +3487,10 @@ input[type='checkbox'] {
     padding: 1px 4px;
   }
 
-  .seat-cards .card-face {
-    width: 22px;
-    height: 32px;
-    font-size: 10px;
+  .seat-hole-card {
+    width: 18px;
+    height: 26px;
+    font-size: 9px;
   }
 
   .seat-hand-type {

@@ -303,6 +303,30 @@ test('all-in showdown reveals cards in serialized players', async (t) => {
   assert.equal(Array.isArray(guestPlayer?.holeCards) && guestPlayer.holeCards.length === 2, true);
 });
 
+test('action cue event is broadcast to all clients when a player acts', async (t) => {
+  const { sockets } = await setupPlayers(t, 2, { allowStraddle: false });
+  const [host, guest] = sockets;
+  const byId = socketById(sockets);
+
+  const started = waitForEvent(
+    host,
+    'roomState',
+    (state) => state?.game && !state.game.finished && state.game.phase === 'preflop' && Boolean(state.game.turnId),
+  );
+  host.emit('startHand');
+  const state = await started;
+  const actorId = state.game.turnId;
+  const actorSocket = byId.get(actorId);
+
+  const hostCue = waitForEvent(host, 'actionCueEvent', (evt) => evt?.playerId === actorId && evt?.kind === 'fold');
+  const guestCue = waitForEvent(guest, 'actionCueEvent', (evt) => evt?.playerId === actorId && evt?.kind === 'fold');
+  actorSocket.emit('playerAction', { action: 'fold' });
+
+  const [evtOnHost, evtOnGuest] = await Promise.all([hostCue, guestCue]);
+  assert.equal(evtOnHost.kind, 'fold');
+  assert.equal(evtOnGuest.kind, 'fold');
+});
+
 test('auto next hand countdown uses 3 seconds and starts automatically', async (t) => {
   const { sockets } = await setupPlayers(t, 3, { allowStraddle: false });
   const [host] = sockets;
@@ -334,6 +358,8 @@ test('auto next hand countdown uses 3 seconds and starts automatically', async (
   );
 
   assert.equal(state.hasStartedOnce, true);
+  assert.equal(state.game.result?.type, 'uncontested');
+  assert.equal(Object.keys(state.game.result?.revealed || {}).length, 0);
   assert.equal(state.autoStartDelayMs, 3000);
   const deltaMs = Number(state.autoStartAt) - Number(state.serverNow);
   assert.equal(deltaMs > 2200 && deltaMs <= 3400, true);

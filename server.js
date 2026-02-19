@@ -288,6 +288,8 @@ function archiveFinishedHand(room) {
         name: p?.name || id,
         seat: p?.seat || null,
         stackAfter: p?.stack ?? null,
+        rebuyCountAfter: Number(p?.rebuyCount) || 0,
+        rebuyTotalAfter: Number(p?.rebuyTotal) || 0,
       };
     }),
     board: [...game.community],
@@ -910,9 +912,8 @@ function settleUncontested(room) {
     winners: [{ playerId: winner.id, amount: pot, name: winner.name }],
     board: [...game.community],
     sidePots: [{ amount: pot, winners: [winner.id] }],
-    revealed: {
-      [winner.id]: [...winner.holeCards],
-    },
+    // Non-showdown pots do not force hole-card reveal.
+    revealed: {},
   };
 
   logRoom(room, `${winner.name} 通过弃牌赢下底池 ${pot}`);
@@ -1182,6 +1183,7 @@ function applyStraddleDecision(room, player, action, rawAmount) {
   if (action === 'skipstraddle') {
     setPlayerLastAction(player, '放弃 straddle');
     appendGameEvent(room, 'straddle_skip', `${player.name} 放弃 straddle`, { playerId: player.id });
+    emitActionCue(room, player.id, 'skipstraddle');
     game.awaitingStraddle = false;
     game.straddlePlayerId = null;
     beginPreflopRound(room, game.bigBlindId);
@@ -1215,6 +1217,7 @@ function applyStraddleDecision(room, player, action, rawAmount) {
     playerId: player.id,
     amount: target,
   });
+  emitActionCue(room, player.id, 'straddle');
 
   beginPreflopRound(room, player.id);
   return { ok: true };
@@ -1245,6 +1248,7 @@ function applyPlayerAction(room, playerId, action, rawAmount) {
     player.folded = true;
     setPlayerLastAction(player, '弃牌');
     appendGameEvent(room, 'action', `${player.name} 弃牌`, { playerId: player.id, action: 'fold' });
+    emitActionCue(room, player.id, 'fold');
     removeFromPending(room, playerId);
     completeActionAndAdvance(room, playerId);
     return { ok: true };
@@ -1254,6 +1258,7 @@ function applyPlayerAction(room, playerId, action, rawAmount) {
     if (toCall !== 0) return { ok: false, error: '当前不能过牌' };
     setPlayerLastAction(player, '过牌');
     appendGameEvent(room, 'action', `${player.name} 过牌`, { playerId: player.id, action: 'check' });
+    emitActionCue(room, player.id, 'check');
     removeFromPending(room, playerId);
     completeActionAndAdvance(room, playerId);
     return { ok: true };
@@ -1268,6 +1273,7 @@ function applyPlayerAction(room, playerId, action, rawAmount) {
       action: 'call',
       amount: paid,
     });
+    emitActionCue(room, player.id, 'call');
     removeFromPending(room, playerId);
     completeActionAndAdvance(room, playerId);
     return { ok: true };
@@ -1298,6 +1304,7 @@ function applyPlayerAction(room, playerId, action, rawAmount) {
       amount: committed,
       target,
     });
+    emitActionCue(room, player.id, 'allin');
 
     completeActionAndAdvance(room, playerId);
     return { ok: true };
@@ -1324,6 +1331,7 @@ function applyPlayerAction(room, playerId, action, rawAmount) {
       action: 'bet',
       target,
     });
+    emitActionCue(room, player.id, 'bet');
     resetPendingAfterAggression(room, playerId);
     completeActionAndAdvance(room, playerId);
     return { ok: true };
@@ -1352,6 +1360,7 @@ function applyPlayerAction(room, playerId, action, rawAmount) {
       action: 'raise',
       target,
     });
+    emitActionCue(room, player.id, 'raise');
     resetPendingAfterAggression(room, playerId);
     completeActionAndAdvance(room, playerId);
     return { ok: true };
@@ -1772,6 +1781,8 @@ function serializeRoom(room, viewerId) {
           playerId: p.playerId,
           name: p.name,
           stackAfter: p.stackAfter,
+          rebuyCountAfter: Number(p.rebuyCountAfter) || 0,
+          rebuyTotalAfter: Number(p.rebuyTotalAfter) || 0,
         })),
       }))
       .reverse(),
@@ -1799,6 +1810,16 @@ function broadcastRoom(room) {
 
 function sendError(socket, msg) {
   socket.emit('errorMessage', msg);
+}
+
+function emitActionCue(room, playerId, kind) {
+  if (!room || !playerId || !kind) return;
+  io.to(room.id).emit('actionCueEvent', {
+    roomId: room.id,
+    playerId,
+    kind,
+    ts: Date.now(),
+  });
 }
 
 function removePlayerFromRoom(room, playerId) {
@@ -2430,14 +2451,16 @@ io.on('connection', (socket) => {
           startedAt: h.startedAt,
           endedAt: h.endedAt,
           blinds: h.blinds,
-          winners: h.result?.winners || [],
-          stacksAfter: (h.players || []).map((p) => ({
-            playerId: p.playerId,
-            name: p.name,
-            stackAfter: p.stackAfter,
-          })),
-        }))
-        .reverse(),
+        winners: h.result?.winners || [],
+        stacksAfter: (h.players || []).map((p) => ({
+          playerId: p.playerId,
+          name: p.name,
+          stackAfter: p.stackAfter,
+          rebuyCountAfter: Number(p.rebuyCountAfter) || 0,
+          rebuyTotalAfter: Number(p.rebuyTotalAfter) || 0,
+        })),
+      }))
+      .reverse(),
     });
   });
 

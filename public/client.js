@@ -58,6 +58,7 @@ let trackedCappuccinoHandNo = null;
 let trackedSeatedPlayerIds = new Set();
 let seatJoinCueKnown = false;
 let trackedFoldVisualByPlayerId = new Map();
+let recentServerActionCues = [];
 let socialUnreadCount = 0;
 let socialSeenChatCount = 0;
 let socialCounterState = null;
@@ -197,8 +198,8 @@ const el = {
   betRangeInput: $('betRangeInput'),
   raiseCollapseBtn: $('raiseCollapseBtn'),
   preActionBox: $('preActionBox'),
-  preCheckFoldBtn: $('preCheckFoldBtn'),
   preCheckBtn: $('preCheckBtn'),
+  preFoldBtn: $('preFoldBtn'),
   preActionClearBtn: $('preActionClearBtn'),
   straddleBox: $('straddleBox'),
   foldBtn: $('foldBtn'),
@@ -808,6 +809,7 @@ function resetActionCueTracking() {
   trackedLastActionByPlayerId = new Map();
   localActionCueEchoes = [];
   trackedFoldVisualByPlayerId = new Map();
+  recentServerActionCues = [];
 }
 
 function normalizeActionText(v) {
@@ -822,7 +824,7 @@ function detectActionCueKind(actionText) {
   if (text.includes('过牌')) return 'check';
   if (text.includes('弃牌')) return 'fold';
   if (text.includes('跟注')) return 'call';
-  if (text.includes('全下')) return 'allin';
+  if (text.includes('全下') || text.includes('all in') || text.includes('allin')) return 'allin';
   if (text.includes('加注')) return 'raise';
   if (text.includes('下注')) return 'bet';
   return null;
@@ -848,6 +850,26 @@ function shouldSkipLocalEcho(kind) {
   if (idx < 0) return false;
   localActionCueEchoes.splice(idx, 1);
   return true;
+}
+
+function pruneServerActionCues(nowMs = Date.now()) {
+  if (!recentServerActionCues.length) return;
+  recentServerActionCues = recentServerActionCues.filter((item) => item && item.expiresAt > nowMs);
+}
+
+function markServerActionCue(playerId, kind) {
+  const nowMs = Date.now();
+  pruneServerActionCues(nowMs);
+  recentServerActionCues.push({
+    playerId: String(playerId || ''),
+    kind: String(kind || ''),
+    expiresAt: nowMs + 1200,
+  });
+}
+
+function hasRecentServerActionCue(playerId, kind) {
+  pruneServerActionCues();
+  return recentServerActionCues.some((item) => item.playerId === String(playerId || '') && item.kind === String(kind || ''));
 }
 
 function playLocalActionCue(kind) {
@@ -910,6 +932,7 @@ function trackPlayerActionCues(nextState) {
     setTimeout(() => {
       if (!uiSoundEnabled) return;
       if (el.tableView.classList.contains('hidden')) return;
+      if (hasRecentServerActionCue(item.playerId, item.kind)) return;
       if (item.playerId === meId && shouldSkipLocalEcho(item.kind)) return;
       playActionCue(item.kind);
     }, Math.min(220, idx * 90));
@@ -1848,6 +1871,13 @@ function compactStackText(value) {
   return String(Math.max(0, Math.floor(n)));
 }
 
+function stackNetAfterBuyIns(stackValue, startingStack, rebuyTotal = 0) {
+  const stack = Math.max(0, Number(stackValue) || 0);
+  const start = Math.max(0, Number(startingStack) || 0);
+  const extra = Math.max(0, Number(rebuyTotal) || 0);
+  return stack - start - extra;
+}
+
 function stackVisualTier(stack, base) {
   const s = Math.max(0, Number(stack) || 0);
   const b = Math.max(1, Number(base) || 1);
@@ -1902,29 +1932,39 @@ function getSeatLayout(maxPlayers, compact) {
 
 function seatNodePreset(maxPlayers, compact) {
   const n = clampInt(maxPlayers, 2, 9);
-  const forceCompact = uiSeatDensity === 'compact';
-  const narrowMobile = compact && isNarrowMobileView();
   if (compact) {
-    let base;
-    if (forceCompact) base = { width: 72, height: 54, compact: true, dense: true };
-    else if (n >= 9) base = { width: 72, height: 54, compact: true, dense: true };
-    else if (n >= 8) base = { width: 76, height: 56, compact: true, dense: true };
-    else if (n >= 7) base = { width: 82, height: 60, compact: true, dense: true };
-    else if (n >= 6) base = { width: 88, height: 62, compact: true, dense: false };
-    else base = { width: 100, height: 70, compact: true, dense: false };
-
-    if (!narrowMobile) return base;
-    return {
-      ...base,
-      width: Math.max(64, base.width - 8),
-      height: Math.max(48, base.height - 6),
-      dense: true,
-    };
+    if (isNarrowMobileView()) return { width: 64, height: 44, compact: true, dense: true };
+    return { width: n >= 8 ? 70 : 76, height: n >= 8 ? 46 : 50, compact: true, dense: true };
   }
-  if (forceCompact) return { width: 118, height: 84, compact: false, dense: true };
-  if (n >= 8) return { width: 124, height: 88, compact: false, dense: true };
-  if (n >= 6) return { width: 148, height: 100, compact: false, dense: false };
-  return { width: 170, height: 116, compact: false, dense: false };
+  if (n >= 8) return { width: 118, height: 74, compact: false, dense: true };
+  if (n >= 6) return { width: 132, height: 80, compact: false, dense: true };
+  return { width: 146, height: 86, compact: false, dense: false };
+}
+
+function buildSeatHoleCardsNode(player, point, preset, compact, shouldAnimateSeatDeal, seat, roomFinished) {
+  if (!player) return null;
+  const showRevealed = Boolean(player.holeCards?.length && (player.id === meId || roomFinished));
+  const activeBack = Boolean(!roomFinished && player.inHand && !player.folded);
+  if (!showRevealed && !activeBack) return null;
+  const node = document.createElement('div');
+  const awayFromCenterDown = point[1] >= 50;
+  node.className = `seat-hole-cards ${awayFromCenterDown ? 'outside-down' : 'outside-up'}${showRevealed ? ' revealed' : ' back-only'}`;
+  node.style.left = `${point[0]}%`;
+  node.style.top = `${point[1]}%`;
+  node.style.setProperty('--hole-offset', `${Math.round(preset.height / 2) + (compact ? 26 : 30)}px`);
+
+  const cards = showRevealed ? player.holeCards.slice(0, 2) : ['XX', 'XX'];
+  cards.forEach((c, idx) => {
+    const card = showRevealed
+      ? cardNode(c, false, shouldAnimateSeatDeal ? 'deal-seat' : '')
+      : cardNode('XX', true, shouldAnimateSeatDeal ? 'deal-seat' : '');
+    card.classList.add('seat-hole-card');
+    if (shouldAnimateSeatDeal) {
+      card.style.animationDelay = `${(seat - 1) * 45 + idx * 60}ms`;
+    }
+    node.appendChild(card);
+  });
+  return node;
 }
 
 function renderSeatMap() {
@@ -1953,9 +1993,9 @@ function renderSeatMap() {
     const minHeight = compact
       ? maxPlayers >= 8
         ? narrowMobile
-          ? 800
-          : 760
-        : 640
+          ? 760
+          : 720
+        : 600
       : maxPlayers >= 8
         ? 800
         : 700;
@@ -2054,23 +2094,6 @@ function renderSeatMap() {
     betChip.textContent = compact ? `本轮 ${streetBet}` : `本轮下注 ${streetBet}`;
     const stackVisual = createStackVisual(displayStack, baseStack);
 
-    const cards = document.createElement('div');
-    cards.className = 'seat-cards';
-    const canShowCardsNow = roomState.game?.finished || !p.folded;
-    const showCompactCards = canShowCardsNow && (!compact || p.id === meId || roomState.game?.finished);
-    if (p.holeCards?.length && showCompactCards) {
-      p.holeCards.forEach((c, idx) => {
-        const card = cardNode(c, false, shouldAnimateSeatDeal ? 'deal-seat' : '');
-        if (shouldAnimateSeatDeal) {
-          card.style.animationDelay = `${(seat - 1) * 45 + idx * 60}ms`;
-        }
-        cards.appendChild(card);
-      });
-    } else if (!compact && p.inHand && !p.folded && !roomState.game?.finished) {
-      cards.appendChild(cardNode('XX', true));
-      cards.appendChild(cardNode('XX', true));
-    }
-
     node.appendChild(head);
     node.appendChild(badges);
     if (isTurn && !roomState.game?.finished) {
@@ -2082,9 +2105,6 @@ function renderSeatMap() {
     node.appendChild(betChip);
     node.appendChild(stackVisual);
     node.appendChild(actionLine);
-    if (cards.children.length > 0) {
-      node.appendChild(cards);
-    }
 
     const admin = createAdminButtons(p.id);
     if (admin) node.appendChild(admin);
@@ -2098,6 +2118,18 @@ function renderSeatMap() {
     }
 
     el.seatMap.appendChild(node);
+    const holeCardsNode = buildSeatHoleCardsNode(
+      p,
+      point,
+      preset,
+      compact,
+      shouldAnimateSeatDeal,
+      seat,
+      Boolean(roomState.game?.finished),
+    );
+    if (holeCardsNode) {
+      el.seatMap.appendChild(holeCardsNode);
+    }
   }
 
   if (shouldAnimateSeatDeal) {
@@ -2165,7 +2197,7 @@ function renderStats() {
       name: p.name,
       seat: p.seat,
       stack: displayStackForPlayer(p),
-      net: displayStackForPlayer(p) - base,
+      net: stackNetAfterBuyIns(displayStackForPlayer(p), base, p.rebuyTotal),
       rebuyCount: Math.max(0, Number(p.rebuyCount) || 0),
       rebuyTotal: Math.max(0, Number(p.rebuyTotal) || 0),
     }))
@@ -2251,7 +2283,7 @@ function renderProfitChart() {
       }
       seriesMap.get(p.playerId).points.push({
         handNo: hand.handNo,
-        net: (p.stackAfter || 0) - start,
+        net: stackNetAfterBuyIns(p.stackAfter || 0, start, p.rebuyTotalAfter || 0),
       });
     });
   });
@@ -2572,15 +2604,15 @@ function isWaitingForTurn() {
 }
 
 function preActionLabel(mode) {
-  if (mode === 'checkfold') return '过牌/弃牌';
-  if (mode === 'check') return '仅过牌';
+  if (mode === 'check') return '过牌';
+  if (mode === 'fold') return '弃牌';
   return '';
 }
 
 function renderPreActionBox(visible) {
   el.preActionBox.classList.toggle('hidden', !visible);
-  el.preCheckFoldBtn.classList.toggle('active', preActionMode === 'checkfold');
   el.preCheckBtn.classList.toggle('active', preActionMode === 'check');
+  el.preFoldBtn.classList.toggle('active', preActionMode === 'fold');
   el.preActionClearBtn.disabled = !preActionMode;
 }
 
@@ -2600,17 +2632,17 @@ function tryAutoPreAction(actionState) {
   if (preActionToken === token) return false;
 
   let action = null;
-  if (preActionMode === 'checkfold') {
-    action = actionState.canCheck && actionState.toCall === 0 ? 'check' : 'fold';
-  } else if (preActionMode === 'check') {
+  if (preActionMode === 'check') {
     if (actionState.canCheck && actionState.toCall === 0) {
       action = 'check';
     } else {
-      showHandBanner('提前操作“仅过牌”条件不满足，已取消', 'error', 1400);
+      showHandBanner('提前操作“过牌”条件不满足，已取消', 'error', 1400);
       clearPreAction(false);
       renderPreActionBox(false);
       return false;
     }
+  } else if (preActionMode === 'fold') {
+    action = 'fold';
   }
 
   if (!action) return false;
@@ -3592,6 +3624,18 @@ socket.on('emoteEvent', (payload) => {
   handleIncomingEmote(payload);
 });
 
+socket.on('actionCueEvent', (payload) => {
+  if (!payload || !roomState) return;
+  if (payload.roomId && payload.roomId !== roomState.roomId) return;
+  const kind = String(payload.kind || '').toLowerCase();
+  if (!kind) return;
+  const playerId = String(payload.playerId || '');
+  markServerActionCue(playerId, kind);
+  if (!uiSoundEnabled || el.tableView.classList.contains('hidden')) return;
+  if (playerId === meId && shouldSkipLocalEcho(kind)) return;
+  playActionCue(kind);
+});
+
 socket.on('socialMessageEvent', (payload) => {
   if (!payload || !roomState) return;
   if (payload.roomId && payload.roomId !== roomState.roomId) return;
@@ -3973,19 +4017,19 @@ el.betRangeInput.addEventListener('input', () => {
   syncQuickRaiseActive();
 });
 
-el.preCheckFoldBtn.addEventListener('click', () => {
-  if (!isWaitingForTurn()) return;
-  preActionMode = 'checkfold';
-  preActionToken = null;
-  showHandBanner('已设置提前操作：过牌/弃牌', 'ok', 900);
-  renderActions();
-});
-
 el.preCheckBtn.addEventListener('click', () => {
   if (!isWaitingForTurn()) return;
   preActionMode = 'check';
   preActionToken = null;
-  showHandBanner('已设置提前操作：仅过牌', 'ok', 900);
+  showHandBanner('已设置提前操作：过牌', 'ok', 900);
+  renderActions();
+});
+
+el.preFoldBtn.addEventListener('click', () => {
+  if (!isWaitingForTurn()) return;
+  preActionMode = 'fold';
+  preActionToken = null;
+  showHandBanner('已设置提前操作：弃牌', 'ok', 900);
   renderActions();
 });
 

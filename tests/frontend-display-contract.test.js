@@ -14,6 +14,8 @@ test('table html keeps required display anchors for mobile/center info', () => {
   assert.equal(html.includes('id="mobilePhaseText"'), true);
   assert.equal(html.includes('id="streetBetHeroText"'), true);
   assert.equal(html.includes('id="startBtn"'), true);
+  assert.equal(html.includes('id="preCheckBtn"'), true);
+  assert.equal(html.includes('id="preFoldBtn"'), true);
   assert.equal(html.includes('id="communityCards"'), true);
   assert.equal(html.includes('id="seatMap"'), true);
 });
@@ -25,8 +27,8 @@ test('client display logic keeps expected status/button/reconnect rules', () => 
   assert.equal(js.includes("finished: '结算中'"), true);
   assert.equal(js.includes('const showCenterStart = Boolean(!roomState?.hasStartedOnce && isHost && (!g || g.finished));'), true);
 
-  // folded player should no longer render hand cards during active hand
-  assert.equal(js.includes('!p.folded && !roomState.game?.finished'), true);
+  // folded players should stop rendering active-hole-card backs.
+  assert.equal(js.includes('const activeBack = Boolean(!roomFinished && player.inHand && !player.folded);'), true);
 
   // reconnect recovery contract
   assert.equal(js.includes('const clientReconnectKey = ensureReconnectKey();'), true);
@@ -42,9 +44,15 @@ test('client display logic keeps expected status/button/reconnect rules', () => 
 
   // stack text must stay full numeric format instead of k/m shorthand
   assert.equal(js.includes('return String(Math.max(0, Math.floor(n)));'), true);
+  assert.equal(js.includes('stackNetAfterBuyIns'), true);
+  assert.equal(js.includes('net: stackNetAfterBuyIns('), true);
 
   // big-win effect should use moneybag instead of old maid/cappuccino scene
   assert.equal(js.includes("node.className = 'moneybag-celebration';"), true);
+
+  // action sounds should support explicit server-side cue events.
+  assert.equal(js.includes("socket.on('actionCueEvent'"), true);
+  assert.equal(js.includes('markServerActionCue'), true);
 });
 
 test('styles keep board readability and visible card-back/fold effects', () => {
